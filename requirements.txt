@@ -1,0 +1,13 @@
+pandas
+numpy
+requests
+beautifulsoup4
+selenium
+sqlalchemy
+psycopg2-binary
+streamlit
+scikit-learn
+plotly
+matplotlib
+seaborn
+textblob

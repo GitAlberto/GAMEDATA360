@@ -1,0 +1,54 @@
+# === ENVIRONNEMENTS PYTHON ===
+.venv/
+env/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# === JUPYTER NOTEBOOKS ===
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# === CONFIGURATION & VARIABLES SENSIBLES ===
+.env
+config.yaml
+config.yaml.example  # (si tu veux garder juste un modèle vide, garde-le)
+
+# === DONNÉES ===
+data/raw/
+data/tmp/
+*.csv
+*.xlsx
+*.json
+
+# ⚠️ Tu peux versionner les fichiers "processed" si utiles :
+# data/processed/  ← tu peux commenter cette ligne si tu veux suivre les data nettoyées
+
+# === LOGS ===
+logs/
+*.log
+
+# === VISUALISATION (si tu génères des exports) ===
+*.png
+*.jpg
+*.jpeg
+*.svg
+*.pdf
+
+# === IDE / OS ===
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+
+# === STREAMLIT CACHE ===
+.streamlit/
+.cache/
+
+# === BUILD / DIST ===
+build/
+dist/
+*.egg-info/
