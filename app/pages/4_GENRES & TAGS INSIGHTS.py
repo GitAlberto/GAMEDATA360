@@ -1,0 +1,188 @@
+import streamlit as st
+import pandas as pd
+import altair as alt
+import ast
+from itertools import combinations
+from sklearn.cluster import KMeans
+from sklearn.preprocessing import StandardScaler
+
+# 1. CONFIGURATION
+st.set_page_config(page_title="GameData360 — GAMEPLAY DNA", layout="wide")
+st.title("GAMEPLAY DNA — Genres & Tags Insights")
+
+# 2. CHARGEMENT
+@st.cache_data
+def load_data(file_path):
+    df = pd.read_csv(file_path)
+    df = df.drop_duplicates()
+    for col in ["Genres", "Categories", "Tags"]:
+        if col in df.columns:
+            df[col] = df[col].apply(lambda x: ast.literal_eval(x) if isinstance(x, str) else x)
+    return df
+
+FILE_PATH = r"C:\Users\bongu\Documents\GAMEDATA360\data\nettoyes\jeux_analysis_final.csv"
+
+try:
+    with st.spinner('Chargement des données...'):
+        df_analyse = load_data(FILE_PATH)
+except FileNotFoundError:
+    st.error(f"Fichier introuvable : {FILE_PATH}")
+    st.stop()
+
+# 3. FILTRES GLOBAUX (SUR PAGE PRINCIPALE)
+st.header("Filtres généraux")
+unique_genres = sorted({g.strip().lower() for lst in df_analyse["Genres"] if isinstance(lst, list) for g in lst if g})
+unique_cats = sorted({c.strip().lower() for lst in df_analyse["Categories"] if isinstance(lst, list) for c in lst if c})
+unique_tags = sorted({t.strip().lower() for lst in df_analyse["Tags"] if isinstance(lst, list) for t in lst if t})
+
+col_f1, col_f2, col_f3 = st.columns(3)
+with col_f1:
+    selected_genres = st.multiselect("Genres", unique_genres)
+with col_f2:
+    selected_categories = st.multiselect("Catégories", unique_cats)
+with col_f3:
+    selected_tags = st.multiselect("Tags", unique_tags)
+
+if st.button("Réinitialiser les filtres"):
+    st.rerun()
+
+df_filtered = df_analyse.copy()
+if selected_genres:
+    df_filtered = df_filtered[df_filtered["Genres"].apply(lambda lst: isinstance(lst, list) and any(g in [x.lower() for x in lst] for g in selected_genres))]
+if selected_categories:
+    df_filtered = df_filtered[df_filtered["Categories"].apply(lambda lst: isinstance(lst, list) and any(c in [x.lower() for x in lst] for c in selected_categories))]
+if selected_tags:
+    df_filtered = df_filtered[df_filtered["Tags"].apply(lambda lst: isinstance(lst, list) and any(t in [x.lower() for x in lst] for t in selected_tags))]
+
+st.success(f"Jeux après filtres : {df_filtered.shape[0]} / {df_analyse.shape[0]}")
+st.divider()
+
+# ---------------------------------------------------------
+# 4. CONTENU SPÉCIFIQUE : GAMEPLAY DNA
+# ---------------------------------------------------------
+
+PLAYTIME_COL = 'Median playtime forever'
+CCU_COL = 'Peak CCU'
+
+col1, col2 = st.columns(2)
+
+# --- A. Top Genres & Tags par Engagement ---
+with col1:
+    st.subheader("Top Genres par Engagement (CCU)")
+    df_exp_genre = df_filtered.explode('Genres')
+    if not df_exp_genre.empty:
+        genre_ccu = df_exp_genre.groupby('Genres')[CCU_COL].median().nlargest(10).reset_index()
+        chart_genre = alt.Chart(genre_ccu).mark_bar(color='#ff4b4b').encode(
+            x=alt.X(f'{CCU_COL}:Q', title="Peak CCU Médian"),
+            y=alt.Y('Genres:N', sort='-x'),
+            tooltip=['Genres', CCU_COL]
+        )
+        st.altair_chart(chart_genre, use_container_width=True)
+
+with col2:
+    st.subheader("Top Tags par Engagement (Playtime)")
+    df_exp_tags = df_filtered.explode('Tags')
+    if not df_exp_tags.empty:
+        # Filtrer les tags rares (< 10 jeux)
+        valid_tags = df_exp_tags['Tags'].value_counts()
+        valid_tags = valid_tags[valid_tags > 10].index
+        tag_play = df_exp_tags[df_exp_tags['Tags'].isin(valid_tags)].groupby('Tags')[PLAYTIME_COL].median().nlargest(10).reset_index()
+        tag_play['Heures'] = tag_play[PLAYTIME_COL] / 60
+        
+        chart_tags = alt.Chart(tag_play).mark_bar(color='#1f77b4').encode(
+            x=alt.X('Heures:Q', title="Heures Médianes"),
+            y=alt.Y('Tags:N', sort='-x'),
+            tooltip=['Tags', 'Heures']
+        )
+        st.altair_chart(chart_tags, use_container_width=True)
+
+st.divider()
+
+# --- B. Graphe de Similarité (Co-occurrence) ---
+st.header("Interactions Gameplay (Co-occurrence Tags)")
+st.caption("Les tags qui apparaissent souvent ensemble définissent des mécaniques de jeu (ex: Survival + Open World).")
+
+if len(df_filtered) > 0:
+    # On prend les 30 tags les plus fréquents de la sélection actuelle
+    all_tags = [t for sublist in df_filtered["Tags"].dropna() for t in sublist]
+    top_tags = pd.Series(all_tags).value_counts().head(30).index.tolist()
+
+    @st.cache_data
+    def get_cooccurrence(df, allowed_tags):
+        pair_counts = {}
+        for tags in df["Tags"].dropna():
+            # Garder seulement les tags du top 30
+            relevant = sorted([t for t in tags if t in allowed_tags])
+            for t1, t2 in combinations(relevant, 2):
+                pair = (t1, t2)
+                pair_counts[pair] = pair_counts.get(pair, 0) + 1
+        return pair_counts
+
+    pairs = get_cooccurrence(df_filtered, top_tags)
+    df_pairs = pd.DataFrame([(k[0], k[1], v) for k, v in pairs.items()], columns=['Tag1', 'Tag2', 'Count'])
+    
+    # Heatmap
+    chart_heat = alt.Chart(df_pairs).mark_rect().encode(
+        x=alt.X('Tag1:N', title=None),
+        y=alt.Y('Tag2:N', title=None),
+        color=alt.Color('Count:Q', scale=alt.Scale(scheme='viridis')),
+        tooltip=['Tag1', 'Tag2', 'Count']
+    ).properties(height=500)
+    st.altair_chart(chart_heat, use_container_width=True)
+
+st.divider()
+
+# --- C. Analyse Gameplay Clusters (K-Means) ---
+st.header("Analyse 'Gameplay Clusters'")
+
+if len(df_filtered) > 50:
+    # Préparation pour le clustering : On utilise les KPI numériques pour grouper les jeux
+    features = [PLAYTIME_COL, 'User score', 'Price', 'Recommendations']
+    df_ml = df_filtered.dropna(subset=features).copy()
+    
+    scaler = StandardScaler()
+    scaled_data = scaler.fit_transform(df_ml[features])
+    
+    # Création de 4 clusters
+    kmeans = KMeans(n_clusters=4, random_state=42, n_init=10)
+    df_ml['Cluster'] = kmeans.fit_predict(scaled_data)
+    
+    # Nommer les clusters (Approximation basée sur les stats)
+    # Pour faire simple, on garde les IDs 0-3, mais on visualise leurs propriétés
+    
+    col_clus1, col_clus2 = st.columns([2, 1])
+    
+    with col_clus1:
+        st.subheader("Projection 2D (Playtime vs Score)")
+        df_ml['Playtime (H)'] = df_ml[PLAYTIME_COL] / 60
+        chart_cluster = alt.Chart(df_ml).mark_circle(size=60).encode(
+            x=alt.X('Playtime (H)', scale=alt.Scale(domain=(0, 200))),
+            y=alt.Y('User score', scale=alt.Scale(domain=(0, 100))),
+            color='Cluster:N',
+            tooltip=['Name', 'Genres', 'Cluster']
+        ).interactive().properties(height=400)
+        st.altair_chart(chart_cluster, use_container_width=True)
+        
+    with col_clus2:
+        st.subheader("Définition des Clusters")
+        cluster_stats = df_ml.groupby('Cluster')[['Price', 'User score', 'Playtime (H)', 'Recommendations']].mean()
+        st.dataframe(cluster_stats.style.highlight_max(axis=0))
+else:
+    st.info("Pas assez de données pour le clustering (Min 50 jeux).")
+
+# --- D. Table Mapping ---
+st.header("Mapping Genre → Top Tags")
+st.caption("Quels sont les ingrédients principaux de chaque genre ?")
+if not df_exp_genre.empty:
+    # Pour chaque genre, trouver les 3 tags les plus fréquents
+    # Attention: c'est lourd. On fait une approximation sur le top 10 genres
+    top_10_genres = df_exp_genre['Genres'].value_counts().head(10).index
+    mapping_data = []
+    
+    for g in top_10_genres:
+        subset = df_exp_genre[df_exp_genre['Genres'] == g]
+        # Exploser les tags de ce sous-ensemble
+        sub_tags = subset.explode('Tags')['Tags'].value_counts().head(5).index.tolist()
+        mapping_data.append({'Genre': g, 'Top Tags': ", ".join(sub_tags)})
+    
+    st.table(pd.DataFrame(mapping_data))
