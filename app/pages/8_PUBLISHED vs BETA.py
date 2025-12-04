@@ -32,8 +32,8 @@ def load_combined_data(path_main, path_beta):
     df_combined = pd.concat([df_pub[cols], df_beta[cols]], ignore_index=True)
     return df_combined, df_beta # On retourne aussi df_beta seul pour l'analyse spécifique
 
-PATH_MAIN = r"C:\Users\bongu\Documents\GAMEDATA360\data\nettoyes\jeux_analysis_final.csv"
-PATH_BETA = r"C:\Users\bongu\Documents\GAMEDATA360\data\nettoyes\jeux_beta.csv"
+PATH_MAIN = r"C:\Users\issak\Documents\GAMEDATA360\data\nettoyes\jeux_analysis_final.csv"
+PATH_BETA = r"C:\Users\issak\Documents\GAMEDATA360\data\nettoyes\jeux_beta.csv"
 
 try:
     with st.spinner('Fusion des datasets Beta et Published...'):
