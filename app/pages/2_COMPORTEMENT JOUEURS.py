@@ -98,7 +98,7 @@ st.success(f"Jeux après filtres : {df_filtered.shape[0]} / {df_analyse.shape[0]
 # ------------------------------------------------------------
 # 5. KPI GLOBAUX
 # ------------------------------------------------------------
-col1, col2, col3, col4 = st.columns(4)
+col1, col2, col3, col4, col5 = st.columns(5)
 
 with col1:
     st.metric("Nombre total de jeux", df_filtered.shape[0],border=True)
@@ -235,42 +235,6 @@ st.header("Analyse du Temps de Jeu (Engagement)")
 # On explose pour séparer les genres multiples
 df_playtime = df_filtered.explode("Genres").dropna(subset=["Genres"])
 
-# 2. Calcul du Top 15 (Moyenne des Heures par Genre)
-df_result = (
-    df_playtime.groupby("Genres")["Average playtime forever"]
-    .mean()                        # On utilise la MOYENNE pour coller à votre EDA
-    .sort_values(ascending=False)
-    .head(15)
-    .reset_index()
-)
-
-# Renommage pour l'affichage propre dans le graphique
-df_result.columns = ["Genres", "Heures Moyennes"]
-
-col_pt1, col_pt2 = st.columns(2) # Création de 2 colonnes
-
-with col_pt1:
-    st.subheader("Top 15 Genres par Temps de Jeu Moyen")
-    
-    chart_playtime = (
-        alt.Chart(df_result)
-        .mark_bar(color="#FF8C00")
-        .encode(
-            x=alt.X("Heures Moyennes:Q", title="Heures Moyennes"),
-            y=alt.Y("Genres:N", sort="-x", title="Genre"),
-            tooltip=["Genres", alt.Tooltip("Heures Moyennes", format=".1f")]
-        )
-        .properties(height=380)
-    )
-    st.altair_chart(chart_playtime, use_container_width=True)
-
-with col_pt2:
-    st.subheader("Données vérifiées")
-    st.dataframe(df_result, use_container_width=True)
-
-st.subheader("Performance Genre vs Marché")
-st.caption("Barre Bleue = Médiane du Genre. Trait Rouge = Médiane Globale (Benchmark).")
-
 # 1. NETTOYAGE CRUCIAL (Fix du problème "Médiane = 0")
 # On ne garde que les jeux qui ont été joués (> 0). 
 # Sinon les milliers de jeux non joués tirent la médiane vers 0.
@@ -283,6 +247,43 @@ global_median_val = df_active[col_ref].median()
 
 # 3. Préparation par Genre
 df_genre_prep = df_active.explode("Genres").dropna(subset=["Genres"])
+
+# 2. Calcul du Top 15 (Moyenne des Heures par Genre)
+df_result = (
+    df_genre_prep.groupby("Genres")["Median playtime forever"]
+    .median()                        
+    .sort_values(ascending=False)
+    .head(15)
+    .reset_index()
+)
+
+# Renommage pour l'affichage propre dans le graphique
+df_result.columns = ["Genres", "Heures medians"]
+
+
+col_pt1, col_pt2 = st.columns(2) # Création de 2 colonnes
+
+with col_pt1:
+    st.subheader("Top 15 Genres par Temps de Jeu médian")
+    
+    chart_playtime = (
+        alt.Chart(df_result)
+        .mark_bar(color="#FF8C00")
+        .encode(
+            x=alt.X("Heures medians:Q", title="Heures médians"),
+            y=alt.Y("Genres:N", sort="-x", title="Genre"),
+            tooltip=["Genres", alt.Tooltip("Heures medians", format=".1f")]
+        )
+        .properties(height=380)
+    )
+    st.altair_chart(chart_playtime, use_container_width=True)
+
+with col_pt2:
+    st.subheader("Données vérifiées")
+    st.dataframe(df_result, use_container_width=True)
+
+st.subheader("Performance Genre vs Marché")
+st.caption("Barre Bleue = Médiane du Genre. Trait Rouge = Médiane Globale (Benchmark).")
 
 # 4. Calcul de la Médiane par Genre (La Barre)
 df_chart = (
@@ -320,41 +321,79 @@ st.altair_chart(bars + ticks, use_container_width=True)
 # Petit indicateur textuel pour aider à la lecture
 st.markdown(f"**Référence marché (Trait Rouge) :** {global_median_val:.1f} Heures")
 
-# --- 4. ANALYSE SOLO VS MULTI (CORRIGÉE) ---
+# --- 4. ANALYSE SOLO VS MULTI (VERSION PRO) ---
+st.divider()
 st.subheader("Engagement : Solo vs Multijoueur")
 
-# Fonction pour classifier simplifié
+# 1. Classification (Fonction inchangée)
 def categorize_mode(cats):
     if not isinstance(cats, list): return "Inconnu"
     cats_lower = [c.lower() for c in cats]
-    if any(x in cats_lower for x in ['multi-player', 'mmo', 'co-op', 'online pvp', 'online co-op']):
+    # On utilise 'set' pour une recherche plus rapide
+    cats_set = set(cats_lower)
+    multi_keywords = {'multi-player', 'mmo', 'co-op', 'online pvp', 'online co-op', 'cross-platform multiplayer'}
+    
+    if not cats_set.isdisjoint(multi_keywords):
         return "Multijoueur / Co-op"
-    elif 'single-player' in cats_lower:
+    elif 'single-player' in cats_set:
         return "Solo"
     return "Autre"
 
-# 1. Création de la catégorie
 df_filtered["Mode"] = df_filtered["Categories"].apply(categorize_mode)
 
-# 2. Filtrage des données pour le graphique
-# On retire "Inconnu" ET les jeux avec 0 heure de jeu (sinon le Log Scale plante)
+# 2. Filtrage et Préparation (Correction Heures)
 df_mode = df_filtered[
-    (df_filtered["Mode"] != "Inconnu") & 
+    (df_filtered["Mode"].isin(["Solo", "Multijoueur / Co-op"])) & 
     (df_filtered["Median playtime forever"] > 0)
 ].copy()
 
-# Boxplot pour voir la distribution
-chart_mode = (
-    alt.Chart(df_mode)
-    .mark_boxplot(extent='min-max', size=50) # size=50 rend les boites plus visibles
-    .encode(
-        x=alt.X("Mode:N", title="Type de jeu"),
-        # Titre corrigé en HEURES
-        y=alt.Y("Median playtime forever:Q", scale=alt.Scale(type="log"), title="Playtime Médian (Heures, Log Scale)"),
-        color=alt.Color("Mode:N", legend=None),
-        tooltip=["Name", "Median playtime forever", "Mode"]
-    )
-    .properties(height=350)
-)
+# CRUCIAL : Conversion en Heures pour que le graphique soit juste
+df_mode["Playtime Hours"] = df_mode["Median playtime forever"] / 60
 
-st.altair_chart(chart_mode, use_container_width=True)
+# 3. Affichage des KPIs (Le petit "plus" Pro)
+col_kpi1, col_kpi2, col_graph = st.columns([1, 1, 3])
+
+median_solo = df_mode[df_mode['Mode']=='Solo']['Playtime Hours'].median()
+median_multi = df_mode[df_mode['Mode']=='Multijoueur / Co-op']['Playtime Hours'].median()
+
+with col_kpi1:
+    st.metric("Médiane Solo", f"{median_solo:.1f} h", delta="Base")
+with col_kpi2:
+    delta_val = median_multi - median_solo
+    st.metric("Médiane Multi", f"{median_multi:.1f} h", delta=f"{delta_val:.1f} h", delta_color="normal")
+
+# 4. Graphique Élégant (Horizontal)
+with col_graph:
+    chart_mode = (
+        alt.Chart(df_mode)
+        .mark_boxplot(extent='min-max', size=40, outliers=True) # Outliers=True montre la réalité des données
+        .encode(
+            # Y = Catégorie (Plus lisible à l'horizontale)
+            y=alt.Y("Mode:N", title=None, axis=alt.Axis(labelFontWeight='bold', labelFontSize=12)),
+            
+            # X = Données Log Scale
+            x=alt.X(
+                "Playtime Hours:Q", 
+                scale=alt.Scale(type="log"), 
+                title="Temps de Jeu Médian (Heures, Échelle Log)"
+            ),
+            
+            # Couleurs Professionnelles
+            color=alt.Color(
+                "Mode:N", 
+                scale=alt.Scale(domain=['Solo', 'Multijoueur / Co-op'], range=['#4c78a8', '#f58518']),
+                legend=None
+            ),
+            
+            tooltip=[
+                alt.Tooltip("Name", title="Jeu"),
+                alt.Tooltip("Playtime Hours", format=".1f", title="Heures"),
+                alt.Tooltip("Mode", title="Type")
+            ]
+        )
+        .properties(height=250, title="Distribution de l'engagement par mode de jeu")
+        .configure_view(strokeWidth=0) # Retire le cadre gris moche autour du graph
+        .configure_axis(grid=False)   # Retire la grille pour un look plus épuré
+    )
+
+    st.altair_chart(chart_mode, use_container_width=True)
