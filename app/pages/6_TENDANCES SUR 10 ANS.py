@@ -54,19 +54,29 @@ st.success(f"Jeux après filtres : {df_filtered.shape[0]} / {df_analyse.shape[0]
 st.divider()
 
 # ---------------------------------------------------------
-# 6. CONTENU SPÉCIFIQUE : TENDANCES
+# 6. CONTENU SPÉCIFIQUE : TENDANCES (CORRIGÉ)
 # ---------------------------------------------------------
 
 # On filtre pour avoir une timeline propre (ex: 2010 - 2024)
 df_trends = df_filtered[(df_filtered['Release Year'] >= 2010) & (df_filtered['Release Year'] <= 2024)].copy()
 
-# Aggrégation par année
+# 1. Calcul des stats générales (Volume, CCU, Price, User Score) sur TOUT le dataset
+# On ne met PAS Metacritic ici pour ne pas le calculer sur les 0
 yearly_stats = df_trends.groupby('Release Year').agg({
     'AppID': 'count',
     'User score': 'mean',
     'Peak CCU': 'mean',
-    'Price': 'mean' # Ajouté pour le sentiment/prix
+    'Price': 'mean' 
 }).reset_index()
+
+# 2. Calcul spécifique pour Metacritic (uniquement > 0)
+# On isole les jeux qui ont un vrai score pour avoir une médiane représentative
+df_meta_clean = df_trends[df_trends['Metacritic score'] > 0]
+meta_stats = df_meta_clean.groupby('Release Year')['Metacritic score'].median().reset_index()
+
+# 3. Fusion des deux tableaux
+# On ajoute la colonne 'Metacritic score' propre dans yearly_stats
+yearly_stats = pd.merge(yearly_stats, meta_stats, on='Release Year', how='left')
 
 # --- A. Graphiques d'Évolution (Lignes) ---
 st.header("Évolution Historique")
@@ -74,23 +84,57 @@ st.header("Évolution Historique")
 c1, c2 = st.columns(2)
 with c1:
     st.subheader("Volume de Jeux Publiés")
-    chart_vol = alt.Chart(yearly_stats).mark_line(point=True, color='#FF5733').encode(
-        x='Release Year:O', y='AppID', tooltip=['Release Year', 'AppID']
+    chart_vol = alt.Chart(yearly_stats).mark_line(point=True, color="#3CC8BF").encode(
+        x='Release Year:O', 
+        y=alt.Y('AppID', title="Nombre de jeux"),
+        tooltip=['Release Year', 'AppID']
     )
     st.altair_chart(chart_vol, use_container_width=True)
 
 with c2:
-    st.subheader("Score Moyen & Sentiment")
-    chart_score = alt.Chart(yearly_stats).mark_line(point=True, color='#33FF57').encode(
-        x='Release Year:O', y=alt.Y('User score', scale=alt.Scale(domain=(50, 100))), tooltip=['Release Year', 'User score']
+    st.subheader("Metacritic : Moyenne vs Médiane")
+    
+    # 1. Filtrage spécifique : On ne garde que les jeux ayant un score Metacritic (> 0)
+    # Sinon les 0 tirent la moyenne vers le bas violemment
+    df_meta_clean = df_trends[df_trends['Metacritic score'] > 0].copy()
+
+    # 2. Calculer Moyenne et Médiane par année en une seule fois
+    meta_evol = df_meta_clean.groupby('Release Year')['Metacritic score'].agg(
+        Moyenne='mean', 
+        Médiane='median'
+    ).reset_index()
+
+    # 3. Transformation pour Altair (Format "Long")
+    # On pivote le tableau pour avoir une colonne "Type" (Moyenne ou Médiane)
+    meta_melted = meta_evol.melt(
+        id_vars='Release Year', 
+        value_vars=['Moyenne', 'Médiane'], 
+        var_name='Indicateur', 
+        value_name='Score'
     )
-    st.altair_chart(chart_score, use_container_width=True)
+
+    # 4. Graphique Multi-lignes
+    chart_meta = alt.Chart(meta_melted).mark_line(point=True).encode(
+        x=alt.X('Release Year:O', title="Année"),
+        
+        # On ajuste l'échelle (souvent entre 60 et 80) pour bien voir l'écart
+        y=alt.Y('Score', scale=alt.Scale(domain=[60, 85]), title="Score Metacritic"),
+        
+        # La couleur distingue les deux lignes automatiquement
+        color=alt.Color('Indicateur', scale=alt.Scale(range=['#FF33A8', '#33FF57'])), # Rose (Moyenne) / Vert (Médiane)
+        
+        tooltip=['Release Year', 'Indicateur', alt.Tooltip('Score', format='.1f')]
+    )
+
+    st.altair_chart(chart_meta, use_container_width=True)
 
 c3, c4 = st.columns(2)
 with c3:
     st.subheader("Peak CCU Moyen")
     chart_ccu = alt.Chart(yearly_stats).mark_line(point=True, color='#3357FF').encode(
-        x='Release Year:O', y='Peak CCU', tooltip=['Release Year', 'Peak CCU']
+        x='Release Year:O', 
+        y='Peak CCU', 
+        tooltip=['Release Year', 'Peak CCU']
     )
     st.altair_chart(chart_ccu, use_container_width=True)
 
@@ -111,7 +155,7 @@ with c4:
         st.altair_chart(chart_area, use_container_width=True)
 
 # --- C. Évolution Modèle Éco ---
-st.header("volution des Modèles Économiques")
+st.header("Évolution des Modèles Économiques")
 df_trends['Model'] = df_trends['Price'].apply(lambda x: 'Free-to-Play' if x == 0 else 'Payant')
 model_stats = df_trends.groupby(['Release Year', 'Model']).size().reset_index(name='Count')
 
