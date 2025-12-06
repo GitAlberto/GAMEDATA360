@@ -17,7 +17,7 @@ def load_data(file_path):
             df[col] = df[col].apply(lambda x: ast.literal_eval(x) if isinstance(x, str) else x)
     return df
 
-FILE_PATH = r"C:\Users\issak\Documents\GAMEDATA360\data\nettoyes\jeux_analysis_final.csv"
+FILE_PATH = r"C:\Users\bongu\Documents\GAMEDATA360\data\nettoyes\jeux_analysis_final.csv"
 
 try:
     with st.spinner('Chargement...'):
@@ -66,7 +66,7 @@ col1, col2 = st.columns(2)
 with col1:
     st.subheader("Prix Médian au fil des Années")
     if 'Release Year' in df_filtered.columns:
-        df_price_year = df_filtered[df_filtered['Release Year'] >= 2010].groupby('Release Year')[PRICE_COL].median().reset_index()
+        df_price_year = df_filtered[df_filtered['Release Year'] >= 1997].groupby('Release Year')[PRICE_COL].median().reset_index()
         chart_year = alt.Chart(df_price_year).mark_line(point=True).encode(
             x='Release Year:O', 
             y=alt.Y(PRICE_COL, title="Prix Médian ($)"),
@@ -156,19 +156,19 @@ with col_f2p_1:
 # On retire les jeux sans note (0), sinon la moyenne s'effondre artificiellement.
 with col_f2p_2:
     st.subheader("Satisfaction")
-    st.caption('Score Médian')
+    st.caption('Score Médian (Metacritic)')
     
     # Filtre spécifique
-    df_score_clean = df_filtered[df_filtered['User score'] > 0]
+    df_score_clean = df_filtered[df_filtered['Metacritic score'] > 0]
     
     # Aggrégation
-    df_score_agg = df_score_clean.groupby('Model')['User score'].median().reset_index()
+    df_score_agg = df_score_clean.groupby('Model')['Metacritic score'].median().reset_index()
     
     # Chart
     base_score = alt.Chart(df_score_agg).encode(x=alt.X('Model', axis=None), color=alt.Color('Model', scale=scale_color, legend=None))
     
-    bar_score = base_score.mark_bar().encode(y=alt.Y('User score', scale=alt.Scale(domain=[0, 100]), title="Score Moyen"))
-    text_score = base_score.mark_text(dy=-10, fontWeight='bold').encode(y='User score', text=alt.Text('User score', format='.1f'))
+    bar_score = base_score.mark_bar().encode(y=alt.Y('Metacritic score', scale=alt.Scale(domain=[0, 100]), title="Score Moyen"))
+    text_score = base_score.mark_text(dy=-10, fontWeight='bold').encode(y='Metacritic score', text=alt.Text('Metacritic score', format='.1f'))
     
     st.altair_chart(bar_score + text_score, use_container_width=True)
 
@@ -196,6 +196,23 @@ with col_f2p_3:
 
 # Petite légende manuelle propre
 st.caption("Turquois = Free-to-Play | Violet Payant (Les moyennes de score et temps excluent les valeurs nulles)")
+
+
+# EVOLUTION DU MARCHE GLOBALE
+
+PRICE_COL = 'Estimated revenue'
+
+# --- A. Prix Moyen par Année ---
+
+st.subheader("Marché globale estimé du gaming au fil des Années")
+if 'Release Year' in df_filtered.columns:
+    df_price_year = df_filtered[df_filtered['Release Year'] >= 1997].groupby('Release Year')[PRICE_COL].sum().reset_index()
+    chart_year = alt.Chart(df_price_year).mark_line(point=True, color="#20EBEB" ).encode(
+        x='Release Year:O', 
+        y=alt.Y(PRICE_COL, title="Marché globale restimé ($)"),
+        tooltip=['Release Year', alt.Tooltip(PRICE_COL, format='$.2f')]
+    )
+    st.altair_chart(chart_year, use_container_width=True)
 
 # --- E. Table Détails --
 st.divider()

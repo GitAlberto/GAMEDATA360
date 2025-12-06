@@ -17,7 +17,7 @@ def load_data(file_path):
             df[col] = df[col].apply(lambda x: ast.literal_eval(x) if isinstance(x, str) else x)
     return df
 
-FILE_PATH = r"C:\Users\issak\Documents\GAMEDATA360\data\nettoyes\jeux_analysis_final.csv"
+FILE_PATH = r"C:\Users\bongu\Documents\GAMEDATA360\data\nettoyes\jeux_analysis_final.csv"
 
 try:
     with st.spinner('Chargement...'):
