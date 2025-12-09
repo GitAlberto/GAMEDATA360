@@ -23,7 +23,8 @@ from utils.config import (
     COLORS, 
     PLOTLY_LAYOUT, 
     TAB_CONFIG,
-    FILE_PATH
+    FILE_PATH,
+    NON_GAME_GENRES
 )
 from utils.data_helpers import (
     load_game_data,
@@ -128,6 +129,23 @@ def load_data():
 try:
     with st.spinner('⚡ Chargement des données...'):
         df_analyse = load_data()
+        
+        # Filtrage des genres non-jeux (logiciels)
+        def is_game(genres_list):
+            """Retourne False si le jeu contient un genre de logiciel."""
+            if not isinstance(genres_list, list):
+                return True
+            # Comparaison case-insensitive (NON_GAME_GENRES est en lowercase)
+            genres_lower = [g.lower() for g in genres_list]
+            return not any(genre in genres_lower for genre in NON_GAME_GENRES)
+        
+        initial_count = len(df_analyse)
+        df_analyse = df_analyse[df_analyse["Genres"].apply(is_game)].copy()
+        excluded_count = initial_count - len(df_analyse)
+        
+        if excluded_count > 0:
+            st.sidebar.success(f"🎮 {excluded_count:,} logiciels exclus (seuls les jeux sont analysés)")
+        
 except FileNotFoundError:
     st.error(f"❌ Fichier introuvable : {FILE_PATH}")
     st.stop()
@@ -214,7 +232,7 @@ with tab1:
     
     # KPIs en 4 colonnes
     kpi1, kpi2, kpi3, kpi4 = st.columns(4)
-    
+    #Nombre de jeux
     with kpi1:
         st.metric(
             "🎮 Nombre de Jeux",
@@ -222,7 +240,7 @@ with tab1:
             delta=f"{len(df_filtered) - len(df_analyse):,}" if selected_genres or selected_categories or selected_tags else None,
             help="Nombre total de jeux après filtrage"
         )
-    
+    #Revenu Total Estimé
     with kpi2:
         if "Estimated revenue" in df_filtered.columns:
             total_revenue = df_filtered["Estimated revenue"].sum()
@@ -233,7 +251,7 @@ with tab1:
             )
         else:
             st.metric("💰 Revenu", "N/A")
-    
+    #Prix Moyen
     with kpi3:
         if "Price" in df_filtered.columns:
             avg_price = df_filtered["Price"].mean()
@@ -242,7 +260,7 @@ with tab1:
                 f"${avg_price:.2f}",
                 help="Prix moyen des jeux"
             )
-    
+    #Prix Médian
     with kpi4:
         if "Price" in df_filtered.columns:
             median_price = df_filtered["Price"].median()
