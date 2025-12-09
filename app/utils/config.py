@@ -108,6 +108,22 @@ MULTI_KEYWORDS = {
 SOLO_KEYWORDS = {'single-player'}
 
 # ============================================================
+# GENRES À EXCLURE (Logiciels non-jeux)
+# ============================================================
+NON_GAME_GENRES = [
+    "utilities", 
+    "design & illustration", 
+    "animation & modeling", 
+    "software training", 
+    "audio production", 
+    "video production", 
+    "web publishing", 
+    "game development", 
+    "photo editing", 
+    "accounting", 
+]
+
+# ============================================================
 # CONFIGURATION DES ONGLETS
 # ============================================================
 TAB_CONFIG = {
