@@ -31,7 +31,7 @@ def load_data(file_path):
     return df
 
 # Chemin du fichier
-FILE_PATH = r"C:\Users\issak\Documents\GAMEDATA360\data\nettoyes\jeux_analysis_final.csv"
+FILE_PATH = r"data/nettoyes/jeux_analysis_final.csv"
 
 # Chargement avec spinner
 try:
