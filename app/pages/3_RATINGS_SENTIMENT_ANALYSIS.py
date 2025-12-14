@@ -1,505 +1,597 @@
+# -*- coding: utf-8 -*-
+"""
+GameData360 - Page Ratings & Sentiment Analysis
+================================================
+Analyse de sentiment basée sur Metacritic (scores critiques) et reviews Steam.
+Insights: Excellence par Genre, Prix-Qualité, ROI, Sentiment vs Critique.
+
+Auteur: GameData360 Team
+Version: 3.1 (Metacritic Focus Edition)
+"""
+
 import streamlit as st
 import pandas as pd
-import altair as alt
-import ast
+import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
-import seaborn as sns
-import matplotlib.pyplot as plt
-import numpy as np
-from collections import Counter
+from plotly.subplots import make_subplots
+import sys
 from pathlib import Path
 
-PROFESSIONAL_COLORS = {
-    'primary': '#2563eb',
-    'secondary': '#7c3aed',
-    'success': '#10b981',
-    'warning': '#f59e0b',
-    'danger': '#ef4444',
-    'info': '#06b6d4',
-    'neutral': '#6b7280',
-    'positive': '#059669',
-    'negative': '#dc2626',
-    'background': '#f8fafc',
-}
+# Ajout du chemin utils au path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-PROFESSIONAL_TEMPLATE = {
-    'layout': go.Layout(
-        font=dict(family="Inter, -apple-system, BlinkMacSystemFont, sans-serif", size=12),
-        plot_bgcolor='white',
-        paper_bgcolor='white',
-        colorway=['#2563eb', '#7c3aed', '#10b981', '#f59e0b', '#ef4444', '#06b6d4'],
-    )
-}
+from utils.config import (
+    COLORS, 
+    PLOTLY_LAYOUT,
+    FILE_PATH,
+    NON_GAME_GENRES
+)
+from utils.data_helpers import (
+    load_game_data,
+    format_number
+)
 
+# ============================================================
+# 1. CONFIGURATION DE LA PAGE
+# ============================================================
+st.set_page_config(
+    page_title="GameData360 — Ratings & Sentiment",
+    page_icon="⭐",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+# CSS personnalisé pour le thème gaming
+st.markdown("""
+<style>
+    @import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&display=swap');
+    
+    .stMetric {
+        background: linear-gradient(135deg, rgba(0,255,136,0.1) 0%, rgba(255,0,255,0.1) 100%);
+        border: 1px solid rgba(0,255,136,0.3);
+        border-radius: 10px;
+        padding: 15px;
+    }
+    
+    .stMetric label {
+        color: #00ff88 !important;
+        font-family: 'Rajdhani', sans-serif !important;
+        font-weight: 600;
+    }
+    
+    .stMetric [data-testid="stMetricValue"] {
+        color: #ffffff !important;
+        font-family: 'Rajdhani', sans-serif !important;
+        font-weight: 700;
+    }
+    
+    h1, h2, h3 {
+        font-family: 'Rajdhani', sans-serif !important;
+        background: linear-gradient(90deg, #00ff88, #00ffff);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+    }
+    
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 8px;
+    }
+    
+    .stTabs [data-baseweb="tab"] {
+        background: rgba(0,255,136,0.1);
+        border-radius: 8px;
+        border: 1px solid rgba(0,255,136,0.3);
+        padding: 10px 20px;
+        font-family: 'Rajdhani', sans-serif;
+        font-weight: 600;
+    }
+    
+    .stTabs [aria-selected="true"] {
+        background: linear-gradient(135deg, rgba(0,255,136,0.3), rgba(0,255,255,0.3));
+        border-color: #00ff88;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+# Titre principal
+st.markdown("# ⭐ RATINGS & SENTIMENT ANALYSIS")
+st.markdown("##### Analyse critique Metacritic & sentiment communauté Steam")
+
+# ============================================================
+# 2. CHARGEMENT DES DONNÉES (CACHE OPTIMISÉ)
+# ============================================================
+@st.cache_data(show_spinner=False)
+def load_and_filter_data():
+    """Charge les données et filtre logiciels."""
+    df = load_game_data(str(FILE_PATH))
+    
+    # Filtrage genres non-jeux
+    def is_game(genres_list):
+        if not isinstance(genres_list, list):
+            return True
+        genres_lower = [g.lower() for g in genres_list]
+        return not any(genre in genres_lower for genre in NON_GAME_GENRES)
+    
+    initial_count = len(df)
+    df = df[df["Genres"].apply(is_game)].copy()
+    excluded_software = initial_count - len(df)
+    
+    # Calculs dérivés
+    df["Total Reviews"] = df["Positive"] + df["Negative"]
+    df["Positive Ratio"] = df["Positive"] / df["Total Reviews"].replace(0, 1)
+    
+    # ROI Qualité (Metacritic par dollar)
+    df["Quality ROI"] = df["Metacritic score"] / df["Price"].replace(0, 1)
+    
+    return df, excluded_software
+
+# Chargement
 try:
-    from wordcloud import WordCloud
-    WORDCLOUD_AVAILABLE = True
-except ImportError:
-    WORDCLOUD_AVAILABLE = False
-    st.warning("⚠️ Le module 'wordcloud' n'est pas installé. Le word cloud ne sera pas disponible.")
-
-st.set_page_config(page_title="GameData360 — QUALITÉ & SATISFACTION", layout="wide")
-st.title("⿣ QUALITÉ & SATISFACTION — Ratings & Sentiment Analysis")
-
-@st.cache_data
-def load_data():
-    """Charge et prépare les données avec mise en cache"""
-    base_path = Path(__file__).parent.parent.parent
-    data_path = base_path / "data" / "nettoyes" / "jeux_analysis_final.csv"
-    
-    if data_path.exists():
-        df = pd.read_csv(data_path)
-    else:
-        possible_paths = [
-            base_path / "data" / "nettoyes" / "jeux_analysis_final.csv",
-            Path("data/nettoyes/jeux_analysis_final.csv"),
-            Path("../../data/nettoyes/jeux_analysis_final.csv"),
-        ]
+    with st.spinner('⚡ Chargement des données...'):
+        df_analyse, excluded_software = load_and_filter_data()
         
-        df = None
-        for path in possible_paths:
-            if path.exists():
-                df = pd.read_csv(path)
-                break
-        
-        if df is None:
-            raise FileNotFoundError(
-                f"Fichier de données introuvable. Cherché dans: {[str(p) for p in possible_paths]}"
-            )
-    
-    for col in ["Genres", "Categories", "Tags"]:
-        if col in df.columns:
-            df[col] = df[col].apply(
-                lambda x: ast.literal_eval(x) if isinstance(x, str) else x
-            )
-    
-    return df
+        if excluded_software > 0:
+            st.sidebar.success(f"🎮 {excluded_software:,} logiciels exclus")
 
-df_analyse = load_data()
-
-st.header("🔎 Filtres généraux")
-
-@st.cache_data
-def get_unique_values(df):
-    """Extrait les valeurs uniques pour les filtres"""
-    unique_genres = []
-    unique_cats = []
-    unique_tags = []
-    
-    if "Genres" in df.columns:
-        df_genres = df.explode("Genres")
-        unique_genres = sorted(df_genres["Genres"].dropna().astype(str).str.strip().str.lower().unique().tolist())
-    
-    if "Categories" in df.columns:
-        df_cats = df.explode("Categories")
-        unique_cats = sorted(df_cats["Categories"].dropna().astype(str).str.strip().str.lower().unique().tolist())
-    
-    if "Tags" in df.columns:
-        df_tags = df.explode("Tags")
-        unique_tags = sorted(df_tags["Tags"].dropna().astype(str).str.strip().str.lower().unique().tolist())
-    
-    return unique_genres, unique_cats, unique_tags
-
-unique_genres, unique_cats, unique_tags = get_unique_values(df_analyse)
-
-col_f1, col_f2, col_f3 = st.columns(3)
-
-with col_f1:
-    selected_genres = st.multiselect("🎭 Genres", unique_genres)
-with col_f2:
-    selected_categories = st.multiselect("📂 Catégories", unique_cats)
-with col_f3:
-    selected_tags = st.multiselect("🏷️ Tags", unique_tags)
-
-if st.button("🔄 Réinitialiser les filtres"):
-    selected_genres = []
-    selected_categories = []
-    selected_tags = []
-    st.rerun()
-
-@st.cache_data
-def apply_filters(df, selected_genres, selected_categories, selected_tags):
-    """Applique les filtres de manière optimisée"""
-    df_filtered = df.copy()
-    
-    if selected_genres:
-        df_filtered = df_filtered[
-            df_filtered["Genres"].apply(
-                lambda lst: any(g in [x.lower() for x in lst] for g in selected_genres)
-            )
-        ]
-    
-    if selected_categories:
-        df_filtered = df_filtered[
-            df_filtered["Categories"].apply(
-                lambda lst: any(c in [x.lower() for x in lst] for c in selected_categories)
-            )
-        ]
-    
-    if selected_tags:
-        df_filtered = df_filtered[
-            df_filtered["Tags"].apply(
-                lambda lst: any(t in [x.lower() for x in lst] for t in selected_tags)
-            )
-        ]
-    
-    return df_filtered
-
-df_filtered = apply_filters(df_analyse, selected_genres, selected_categories, selected_tags)
-
-required_cols = ["User score", "Metacritic score", "Positive", "Negative", "Genres", "Tags", "Name"]
-missing_cols = [col for col in required_cols if col not in df_filtered.columns]
-
-if missing_cols:
-    st.error(f"⚠️ Colonnes manquantes dans le dataset: {', '.join(missing_cols)}")
+except Exception as e:
+    st.error(f"❌ Erreur lors du chargement : {e}")
     st.stop()
 
-df_filtered = df_filtered[
-    (df_filtered["User score"] > 0) | (df_filtered["Metacritic score"] > 0)
-].copy()
+# ============================================================
+# 3. TOP-LEVEL KPIs
+# ============================================================
+st.markdown("### 📊 Indicateurs Globaux")
 
-df_filtered["Total Reviews"] = df_filtered["Positive"] + df_filtered["Negative"]
-df_filtered["Positive Ratio"] = df_filtered["Positive"] / df_filtered["Total Reviews"].replace(0, 1)
-df_filtered["Negative Ratio"] = df_filtered["Negative"] / df_filtered["Total Reviews"].replace(0, 1)
+kpi1, kpi2, kpi3, kpi4 = st.columns(4)
 
-st.header("📊 Graphiques")
+# Filtrer jeux avec Metacritic
+df_meta = df_analyse[df_analyse["Metacritic score"] > 0]
 
-st.subheader("📦 Boxplot du score par genre")
-
-@st.cache_data
-def prepare_boxplot_data(df_filtered):
-    """Prépare les données pour le boxplot"""
-    df_boxplot = df_filtered[df_filtered["User score"] > 0].copy()
-    if df_boxplot.empty:
-        return None, None
+# KPI 1: Score Metacritic Médian
+if len(df_meta) > 0:
+    median_meta = df_meta["Metacritic score"].median()
+    avg_meta = df_meta["Metacritic score"].mean()
     
-    df_boxplot = df_boxplot.explode("Genres")
-    df_boxplot = df_boxplot[df_boxplot["Genres"].notna()].copy()
-    df_boxplot["Genre"] = df_boxplot["Genres"].astype(str).str.strip()
-    
-    genre_counts = df_boxplot["Genre"].value_counts().head(15)
-    df_boxplot = df_boxplot[df_boxplot["Genre"].isin(genre_counts.index)]
-    
-    df_genre_scores = pd.DataFrame({
-        "Genre": df_boxplot["Genre"],
-        "User Score": df_boxplot["User score"],
-        "Metacritic Score": df_boxplot["Metacritic score"].where(df_boxplot["Metacritic score"] > 0)
-    })
-    
-    return df_genre_scores, genre_counts
-
-df_genre_scores, genre_counts = prepare_boxplot_data(df_filtered)
-
-if df_genre_scores is not None and not df_genre_scores.empty:
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        df_user = df_genre_scores[df_genre_scores["User Score"] > 0]
-        if not df_user.empty:
-            fig_user = px.box(
-                df_user,
-                x="Genre",
-                y="User Score",
-                title="User Score par Genre",
-                labels={"User Score": "User Score", "Genre": "Genre"},
-                color_discrete_sequence=[PROFESSIONAL_COLORS['primary']]
-            )
-            fig_user.update_layout(
-                template='plotly_white',
-                font=dict(family="Inter, sans-serif", size=11),
-                showlegend=False,
-                height=400
-            )
-            fig_user.update_xaxes(tickangle=-45, showgrid=True, gridcolor='#e5e7eb')
-            fig_user.update_yaxes(showgrid=True, gridcolor='#e5e7eb')
-            st.plotly_chart(fig_user, use_container_width=True)
-    
-    with col2:
-        df_meta = df_genre_scores[df_genre_scores["Metacritic Score"].notna()]
-        if not df_meta.empty:
-            fig_meta = px.box(
-                df_meta,
-                x="Genre",
-                y="Metacritic Score",
-                title="Metacritic Score par Genre",
-                labels={"Metacritic Score": "Metacritic Score", "Genre": "Genre"},
-                color_discrete_sequence=[PROFESSIONAL_COLORS['secondary']]
-            )
-            fig_meta.update_layout(
-                template='plotly_white',
-                font=dict(family="Inter, sans-serif", size=11),
-                showlegend=False,
-                height=400
-            )
-            fig_meta.update_xaxes(tickangle=-45, showgrid=True, gridcolor='#e5e7eb')
-            fig_meta.update_yaxes(showgrid=True, gridcolor='#e5e7eb')
-            st.plotly_chart(fig_meta, use_container_width=True)
-
-st.subheader("📊 Ratio reviews positives / négatives par genre")
-
-@st.cache_data
-def prepare_ratio_data(df_filtered):
-    """Prépare les données pour le ratio"""
-    df_ratio = df_filtered[df_filtered["Total Reviews"] > 0].copy()
-    if df_ratio.empty:
-        return None
-    
-    df_ratio = df_ratio.explode("Genres")
-    df_ratio = df_ratio[df_ratio["Genres"].notna()].copy()
-    df_ratio["Genre"] = df_ratio["Genres"].astype(str).str.strip()
-    
-    df_genre_sentiment = pd.DataFrame({
-        "Genre": df_ratio["Genre"],
-        "Positive": df_ratio["Positive"],
-        "Negative": df_ratio["Negative"],
-        "Total": df_ratio["Total Reviews"]
-    })
-    df_genre_agg = df_genre_sentiment.groupby("Genre").agg({
-        "Positive": "sum",
-        "Negative": "sum",
-        "Total": "sum"
-    }).reset_index()
-    
-    df_genre_agg["Positive Ratio"] = df_genre_agg["Positive"] / df_genre_agg["Total"]
-    df_genre_agg["Negative Ratio"] = df_genre_agg["Negative"] / df_genre_agg["Total"]
-    df_genre_agg = df_genre_agg.sort_values("Total", ascending=False).head(15)
-    
-    return df_genre_agg
-
-df_genre_agg = prepare_ratio_data(df_filtered)
-
-if df_genre_agg is not None and not df_genre_agg.empty:
-    fig_ratio = go.Figure()
-    
-    fig_ratio.add_trace(go.Bar(
-        x=df_genre_agg["Genre"],
-        y=df_genre_agg["Positive Ratio"] * 100,
-        name="Positives",
-        marker_color=PROFESSIONAL_COLORS['positive'],
-        hovertemplate='<b>%{x}</b><br>Positives: %{y:.1f}%<extra></extra>'
-    ))
-    
-    fig_ratio.add_trace(go.Bar(
-        x=df_genre_agg["Genre"],
-        y=df_genre_agg["Negative Ratio"] * 100,
-        name="Négatives",
-        marker_color=PROFESSIONAL_COLORS['negative'],
-        hovertemplate='<b>%{x}</b><br>Négatives: %{y:.1f}%<extra></extra>'
-    ))
-    
-    fig_ratio.update_layout(
-        title=dict(text="Ratio Reviews Positives/Négatives par Genre", font=dict(size=16)),
-        xaxis_title="Genre",
-        yaxis_title="Pourcentage (%)",
-        barmode="stack",
-        xaxis_tickangle=-45,
-        height=450,
-        template='plotly_white',
-        font=dict(family="Inter, sans-serif", size=11),
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-        hovermode='x unified',
-        plot_bgcolor='white',
-        paper_bgcolor='white'
-    )
-    fig_ratio.update_xaxes(showgrid=True, gridcolor='#e5e7eb')
-    fig_ratio.update_yaxes(showgrid=True, gridcolor='#e5e7eb')
-    
-    st.plotly_chart(fig_ratio, use_container_width=True)
-
-st.subheader("🎯 User score vs Metacritic score")
-
-df_scatter = df_filtered[
-    (df_filtered["User score"] > 0) & (df_filtered["Metacritic score"] > 0)
-].copy()
-
-if not df_scatter.empty:
-    if len(df_scatter) > 5000:
-        df_scatter = df_scatter.sample(n=5000, random_state=42)
-    
-    df_scatter["Bubble Size"] = np.log1p(df_scatter["Total Reviews"]) * 5
-    
-    fig_scatter = px.scatter(
-        df_scatter,
-        x="Metacritic score",
-        y="User score",
-        size="Bubble Size",
-        hover_data=["Name", "Positive", "Negative"],
-        title="User Score vs Metacritic Score",
-        labels={
-            "Metacritic score": "Metacritic Score",
-            "User score": "User Score"
-        },
-        trendline="ols",
-        color_discrete_sequence=[PROFESSIONAL_COLORS['primary']]
-    )
-    
-    fig_scatter.update_traces(
-        marker=dict(
-            opacity=0.5,
-            line=dict(width=0.5, color='white')
+    with kpi1:
+        st.metric(
+            "⭐ Metacritic Médian",
+            f"{median_meta:.0f}",
+            delta=f"Moyenne: {avg_meta:.1f}",
+            delta_color="off",
+            help="Score critique médian"
         )
-    )
-    fig_scatter.update_layout(
-        template='plotly_white',
-        font=dict(family="Inter, sans-serif", size=11),
-        height=500,
-        plot_bgcolor='white',
-        paper_bgcolor='white'
-    )
-    fig_scatter.update_xaxes(showgrid=True, gridcolor='#e5e7eb')
-    fig_scatter.update_yaxes(showgrid=True, gridcolor='#e5e7eb')
-    
-    st.plotly_chart(fig_scatter, use_container_width=True)
-    
-    correlation = df_scatter["User score"].corr(df_scatter["Metacritic score"])
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.metric("Corrélation", f"{correlation:.3f}", help="Corrélation entre User Score et Metacritic Score")
 
-st.subheader("☁️ Word cloud des tags liés à une note élevée")
+# KPI 2: Taux Positif Global
+df_reviews = df_analyse[df_analyse["Total Reviews"] > 0]
+if len(df_reviews) > 0:
+    total_pos = df_reviews["Positive"].sum()
+    total_neg = df_reviews["Negative"].sum()
+    pos_rate = (total_pos / (total_pos + total_neg)) * 100 if (total_pos + total_neg) > 0 else 0
+    
+    with kpi2:
+        st.metric(
+            "👍 Taux Positif Global",
+            f"{pos_rate:.0f}%",
+            help="% reviews positives Steam"
+        )
 
-if WORDCLOUD_AVAILABLE:
-    score_threshold = df_filtered["User score"].quantile(0.75)
+# KPI 3: Jeux Exceptionnels
+exceptional = df_meta[df_meta["Metacritic score"] >= 85]
+
+with kpi3:
+    st.metric(
+        "🏆 Jeux Exceptionnels",
+        len(exceptional),
+        delta=f"{(len(exceptional)/len(df_meta)*100):.1f}% du total",
+        delta_color="off",
+        help="Jeux avec Metacritic ≥85"
+    )
+
+# KPI 4: Corrélation Sentiment-Critique
+df_corr = df_analyse[(df_analyse["Metacritic score"] > 0) & (df_analyse["Total Reviews"] > 10)]
+if len(df_corr) > 0:
+    correlation = df_corr["Positive Ratio"].corr(df_corr["Metacritic score"])
     
-    df_wc = df_filtered[df_filtered["User score"] >= score_threshold].copy()
-    df_wc = df_wc.explode("Tags")
-    df_wc = df_wc[df_wc["Tags"].notna()].copy()
-    df_wc["Tag"] = df_wc["Tags"].astype(str).str.strip().str.lower()
-    df_wc["Weight"] = (df_wc["User score"] / 100 * 10 + 1).astype(int)
+    with kpi4:
+        st.metric(
+            "🎯 Corrélation Sentiment",
+            f"{correlation:.2f}",
+            help="Corrélation % positif vs Metacritic"
+        )
+
+st.divider()
+
+# ============================================================
+# 4. INSIGHTS AUTOMATIQUES PERTINENTS
+# ============================================================
+st.markdown("### 🎯 Insights Automatiques")
+
+col_insight1, col_insight2 = st.columns(2)
+
+with col_insight1:
+    # Insight 1: Excellence Critique par Genre
+    df_genre_meta = df_meta.explode("Genres").dropna(subset=["Genres"])
     
-    if not df_wc.empty:
-        tags_repeated = []
-        for tag, weight in zip(df_wc["Tag"], df_wc["Weight"]):
-            tags_repeated.extend([tag] * int(weight))
+    if len(df_genre_meta) > 0:
+        genre_scores = df_genre_meta.groupby("Genres")["Metacritic score"].agg(['median', 'count']).reset_index()
+        genre_scores = genre_scores[genre_scores['count'] >= 10]  # Au moins 10 jeux
         
-        if tags_repeated:
-            tag_counts = Counter(tags_repeated)
-            top_tags = dict(tag_counts.most_common(80))
+        if len(genre_scores) > 0:
+            best_genre = genre_scores.loc[genre_scores['median'].idxmax()]
             
-            wordcloud = WordCloud(
-                width=1000,
-                height=500,
-                background_color="white",
-                max_words=80,
-                colormap="Blues",
-                relative_scaling=0.5,
-                min_font_size=10,
-                max_font_size=120
-            ).generate_from_frequencies(top_tags)
+            st.success(
+                f"🏆 **Excellence Critique**: Le genre **{best_genre['Genres']}** domine "
+                f"avec un Metacritic médian de **{best_genre['median']:.0f}** "
+                f"({int(best_genre['count'])} jeux)"
+            )
+    
+    # Insight 2: Corrélation Prix-Qualité
+    df_price_quality = df_meta[df_meta["Price"] > 0]
+    
+    if len(df_price_quality) > 0:
+        price_corr = df_price_quality["Price"].corr(df_price_quality["Metacritic score"])
+        
+        if price_corr > 0.3:
+            st.info(
+                f"💎 **Prix = Qualité**: Corrélation de **{price_corr:.2f}** — "
+                f"les jeux chers sont généralement mieux notés par la critique"
+            )
+        elif price_corr < 0.1:
+            st.success(
+                f"💰 **Prix ≠ Qualité**: Corrélation faible ({price_corr:.2f}) — "
+                f"on trouve d'excellents jeux à tous les prix !"
+            )
+    
+    # Insight 3: Best ROI par Tranche
+    if len(df_price_quality) > 0:
+        # Tranche <$10
+        budget = df_price_quality[df_price_quality["Price"] < 10]
+        
+        if len(budget) > 0:
+            best_budget = budget.nlargest(1, "Metacritic score").iloc[0]
             
-            fig_wc, ax = plt.subplots(figsize=(14, 7), facecolor='white')
-            ax.imshow(wordcloud, interpolation="bilinear")
-            ax.axis("off")
-            ax.set_title("Tags les plus associés aux jeux avec scores élevés", 
-                        fontsize=16, pad=20, fontweight='600', color='#1f2937')
-            plt.tight_layout()
-            st.pyplot(fig_wc, use_container_width=True)
-            plt.close(fig_wc)
-    else:
-        st.info("Pas assez de données pour générer le word cloud")
-else:
-    st.error("Le module 'wordcloud' n'est pas installé. Veuillez l'installer avec: pip install wordcloud")
+            st.success(
+                f"💰 **Best Value <$10**: **{best_budget['Name']}** "
+                f"(Metacritic: {best_budget['Metacritic score']:.0f}, ${best_budget['Price']:.2f})"
+            )
 
-st.subheader("🔥 Heatmap Genres × Sentiment")
+with col_insight2:
+    # Insight 4: Sentiment vs Critique (alignement)
+    if len(df_corr) > 0 and correlation > 0.5:
+        st.info(
+            f"📊 **Alignement Communauté-Critique**: Corrélation **{correlation:.2f}** — "
+            f"la communauté Steam et les critiques sont généralement d'accord"
+        )
+    elif len(df_corr) > 0 and correlation < 0.3:
+        st.warning(
+            f"⚠️ **Divergence Communauté-Critique**: Corrélation **{correlation:.2f}** — "
+            f"la communauté et les critiques ont des opinions différentes"
+        )
+    
+    # Insight 5: Jeux Polarisants (Reviews abondantes mais 50/50)
+    polarizing = df_reviews[
+        (df_reviews["Total Reviews"] > 1000) &
+        (df_reviews["Positive Ratio"] > 0.45) &
+        (df_reviews["Positive Ratio"] < 0.55)
+    ]
+    
+    if len(polarizing) > 0:
+        st.warning(
+            f"⚡ **{len(polarizing)} Jeux Polarisants Détectés**: "
+            f"Très reviewés (>1000) mais ratio 50/50 — opinion divisée"
+        )
+    
+    # Insight 6: Saturation Qualité par Genre
+    if len(df_genre_meta) > 0:
+        genre_exceptional = df_genre_meta[df_genre_meta["Metacritic score"] >= 85]
+        genre_exc_counts = genre_exceptional.groupby("Genres").size().sort_values(ascending=False)
+        
+        if len(genre_exc_counts) > 0:
+            top_exc_genre = genre_exc_counts.index[0]
+            count_exc = genre_exc_counts.iloc[0]
+            
+            st.success(
+                f"🎮 **Excellence en Volume**: Le genre **{top_exc_genre}** compte "
+                f"**{count_exc}** jeux exceptionnels (≥85) — marché de qualité"
+            )
 
-df_hm = df_filtered[df_filtered["Total Reviews"] > 0].copy()
-df_hm = df_hm.explode("Genres")
-df_hm = df_hm[df_hm["Genres"].notna()].copy()
-df_hm["Genre"] = df_hm["Genres"].astype(str).str.strip()
+st.divider()
 
-if not df_hm.empty:
-    df_heatmap = pd.DataFrame({
-        "Genre": df_hm["Genre"],
-        "Positive": df_hm["Positive"],
-        "Negative": df_hm["Negative"],
-        "Total": df_hm["Total Reviews"]
-    })
-    df_heatmap_agg = df_heatmap.groupby("Genre").agg({
+# ============================================================
+# 5. ONGLETS D'ANALYSE
+# ============================================================
+tab1, tab2, tab3, tab4 = st.tabs([
+    "⭐ Qualité Critique",
+    "💬 Sentiment Communauté",
+    "💰 Prix vs Qualité",
+    "🏆 Excellence par Genre"
+])
+
+# ============================================================
+# TAB 1: QUALITÉ CRITIQUE
+# ============================================================
+with tab1:
+    st.markdown("### ⭐ Distribution Metacritic")
+    
+    col_dist1, col_dist2 = st.columns([2, 1])
+    
+    with col_dist1:
+        # Histogramme Metacritic
+        fig_hist_meta = px.histogram(
+            df_meta,
+            x="Metacritic score",
+            nbins=40,
+            color_discrete_sequence=[COLORS['primary']]
+        )
+        
+        # Lignes verticales pour les seuils
+        fig_hist_meta.add_vline(x=85, line_dash="dash", line_color=COLORS['primary'], 
+                                annotation_text="Exceptionnel (85)")
+        fig_hist_meta.add_vline(x=70, line_dash="dash", line_color=COLORS['warning'], 
+                                annotation_text="Bon (70)")
+        
+        fig_hist_meta.update_layout(
+            **PLOTLY_LAYOUT,
+            xaxis_title="Score Metacritic",
+            yaxis_title="Nombre de jeux",
+            height=400,
+            showlegend=False
+        )
+        
+        st.plotly_chart(fig_hist_meta, use_container_width=True)
+    
+    with col_dist2:
+        st.markdown("#### 📋 Statistiques")
+        
+        stats_meta = pd.DataFrame({
+            'Métrique': ['Médiane', 'Moyenne', 'Min', 'Max', 'Écart-type'],
+            'Valeur': [
+                f"{df_meta['Metacritic score'].median():.1f}",
+                f"{df_meta['Metacritic score'].mean():.1f}",
+                f"{df_meta['Metacritic score'].min():.0f}",
+                f"{df_meta['Metacritic score'].max():.0f}",
+                f"{df_meta['Metacritic score'].std():.1f}"
+            ]
+        })
+        
+        st.dataframe(stats_meta, hide_index=True, use_container_width=True)
+        
+        # Distribution par tranche
+        st.markdown("#### 📊 Par Tranche")
+        
+        exceptional_pct = (len(df_meta[df_meta["Metacritic score"] >= 85]) / len(df_meta)) * 100
+        good_pct = (len(df_meta[(df_meta["Metacritic score"] >= 70) & (df_meta["Metacritic score"] < 85)]) / len(df_meta)) * 100
+        average_pct = (len(df_meta[(df_meta["Metacritic score"] >= 50) & (df_meta["Metacritic score"] < 70)]) / len(df_meta)) * 100
+        poor_pct = (len(df_meta[df_meta["Metacritic score"] < 50]) / len(df_meta)) * 100
+        
+        tranches = pd.DataFrame({
+            'Tranche': ['≥85 (Exceptionnel)', '70-84 (Bon)', '50-69 (Moyen)', '<50 (Faible)'],
+            '%': [f"{exceptional_pct:.1f}%", f"{good_pct:.1f}%", f"{average_pct:.1f}%", f"{poor_pct:.1f}%"]
+        })
+        
+        st.dataframe(tranches, hide_index=True, use_container_width=True)
+    
+    st.divider()
+    
+    # Top & Bottom 10
+    col_top, col_bottom = st.columns(2)
+    
+    with col_top:
+        st.markdown("### 🏆 Top 10 Metacritic")
+        
+        top_10 = df_meta.nlargest(10, "Metacritic score")[["Name", "Metacritic score", "Positive Ratio", "Price"]]
+        top_10["Positive Ratio"] = (top_10["Positive Ratio"] * 100).round(1)
+        top_10.columns = ["Nom", "Metacritic", "% Positif", "Prix ($)"]
+        
+        st.dataframe(top_10, hide_index=True, use_container_width=True)
+    
+    with col_bottom:
+        st.markdown("### 📉 Bottom 10 Metacritic")
+        
+        bottom_10 = df_meta.nsmallest(10, "Metacritic score")[["Name", "Metacritic score", "Positive Ratio", "Price"]]
+        bottom_10["Positive Ratio"] = (bottom_10["Positive Ratio"] * 100).round(1)
+        bottom_10.columns = ["Nom", "Metacritic", "% Positif", "Prix ($)"]
+        
+        st.dataframe(bottom_10, hide_index=True, use_container_width=True)
+
+# ============================================================
+# TAB 2: SENTIMENT COMMUNAUTÉ
+# ============================================================
+with tab2:
+    st.markdown("### 💬 Sentiment Steam par Genre")
+    
+    # Agrégation par genre
+    df_sentiment = df_reviews.explode("Genres").dropna(subset=["Genres"])
+    
+    sentiment_by_genre = df_sentiment.groupby("Genres").agg({
         "Positive": "sum",
         "Negative": "sum",
-        "Total": "sum"
+        "Total Reviews": "sum"
     }).reset_index()
     
-    df_heatmap_agg["Sentiment Score"] = (df_heatmap_agg["Positive"] - df_heatmap_agg["Negative"]) / df_heatmap_agg["Total"]
-    df_heatmap_agg = df_heatmap_agg[df_heatmap_agg["Total"] >= 100].sort_values("Total", ascending=False).head(12)
+    sentiment_by_genre = sentiment_by_genre[sentiment_by_genre["Total Reviews"] >= 100]  # Minimum reviews
+    sentiment_by_genre["Positive Ratio"] = (sentiment_by_genre["Positive"] / sentiment_by_genre["Total Reviews"]) * 100
+    sentiment_by_genre = sentiment_by_genre.sort_values("Positive Ratio", ascending=False).head(15)
     
-    heatmap_data = df_heatmap_agg.set_index("Genre")[["Sentiment Score"]].T
-    
-    fig_heatmap = px.imshow(
-        heatmap_data,
-        labels=dict(x="Genre", y="Sentiment Score", color="Score"),
-        x=heatmap_data.columns,
-        y=heatmap_data.index,
-        color_continuous_scale=[[0, '#dc2626'], [0.5, '#fbbf24'], [1, '#10b981']],
-        aspect="auto",
-        title="Heatmap Sentiment par Genre",
-        text_auto='.2f'
+    fig_sentiment = px.bar(
+        sentiment_by_genre,
+        x="Positive Ratio",
+        y="Genres",
+        orientation="h",
+        color="Positive Ratio",
+        color_continuous_scale=[[0, COLORS['danger']], [0.5, COLORS['warning']], [1, COLORS['primary']]]
     )
     
-    fig_heatmap.update_layout(
-        template='plotly_white',
-        font=dict(family="Inter, sans-serif", size=11),
-        height=300,
-        plot_bgcolor='white',
-        paper_bgcolor='white'
+    fig_sentiment.update_layout(
+        **PLOTLY_LAYOUT,
+        xaxis_title="% Reviews Positives",
+        height=500,
+        showlegend=False,
+        coloraxis_showscale=False
     )
-    fig_heatmap.update_xaxes(tickangle=-45, showgrid=False)
-    fig_heatmap.update_yaxes(showgrid=False)
     
-    st.plotly_chart(fig_heatmap, use_container_width=True)
+    st.plotly_chart(fig_sentiment, use_container_width=True)
+    
+    st.divider()
+    
+    # Jeux Polarisants (table)
+    st.markdown("### ⚡ Jeux Polarisants (Ratio ~50/50)")
+    
+    if len(polarizing) > 0:
+        polarizing_display = polarizing.nlargest(10, "Total Reviews")[
+            ["Name", "Positive Ratio", "Total Reviews", "Metacritic score"]
+        ].copy()
+        
+        polarizing_display["Positive Ratio"] = (polarizing_display["Positive Ratio"] * 100).round(1)
+        polarizing_display.columns = ["Nom", "% Positif", "Total Reviews", "Metacritic"]
+        
+        st.dataframe(polarizing_display, hide_index=True, use_container_width=True)
+    else:
+        st.info("Aucun jeu polarisant détecté")
 
-st.header("📄 Table")
+# ============================================================
+# TAB 3: PRIX VS QUALITÉ
+# ============================================================
+with tab3:
+    st.markdown("### 💰 Corrélation Prix vs Metacritic")
+    
+    df_price_scatter = df_meta[df_meta["Price"] > 0]
+    
+    if len(df_price_scatter) > 0:
+        # Échantillonnage
+        if len(df_price_scatter) > 2000:
+            df_price_scatter = df_price_scatter.sample(2000, random_state=42)
+        
+        # Catégories de prix
+        df_price_scatter["Price Category"] = pd.cut(
+            df_price_scatter["Price"],
+            bins=[0, 10, 30, 100],
+            labels=["Budget (<$10)", "Standard ($10-30)", "Premium (>$30)"]
+        )
+        
+        fig_price_scatter = px.scatter(
+            df_price_scatter,
+            x="Price",
+            y="Metacritic score",
+            color="Price Category",
+            size=np.log1p(df_price_scatter["Total Reviews"]) * 3,
+            hover_data=["Name"],
+            color_discrete_map={
+                "Budget (<$10)": COLORS['chart'][0],
+                "Standard ($10-30)": COLORS['chart'][2],
+                "Premium (>$30)": COLORS['chart'][4]
+            },
+            trendline="ols"
+        )
+        
+        fig_price_scatter.update_traces(marker=dict(opacity=0.6))
+        
+        fig_price_scatter.update_layout(
+            **PLOTLY_LAYOUT,
+            height=500,
+            xaxis_title="Prix ($)",
+            yaxis_title="Metacritic Score"
+        )
+        
+        st.plotly_chart(fig_price_scatter, use_container_width=True)
+        
+        st.metric("📊 Corrélation Prix-Qualité", f"{price_corr:.3f}")
+    
+    st.divider()
+    
+    # Best ROI par tranche
+    st.markdown("### 💎 Best Value for Money par Tranche")
+    
+    col_roi1, col_roi2, col_roi3 = st.columns(3)
+    
+    with col_roi1:
+        st.markdown("#### Budget (<$10)")
+        
+        budget_games = df_price_quality[df_price_quality["Price"] < 10]
+        
+        if len(budget_games) > 0:
+            top_budget = budget_games.nlargest(5, "Metacritic score")[["Name", "Price", "Metacritic score"]]
+            top_budget.columns = ["Nom", "Prix ($)", "Metacritic"]
+            
+            st.dataframe(top_budget, hide_index=True, use_container_width=True)
+    
+    with col_roi2:
+        st.markdown("#### Standard ($10-30)")
+        
+        standard_games = df_price_quality[(df_price_quality["Price"] >= 10) & (df_price_quality["Price"] <= 30)]
+        
+        if len(standard_games) > 0:
+            top_standard = standard_games.nlargest(5, "Metacritic score")[["Name", "Price", "Metacritic score"]]
+            top_standard.columns = ["Nom", "Prix ($)", "Metacritic"]
+            
+            st.dataframe(top_standard, hide_index=True, use_container_width=True)
+    
+    with col_roi3:
+        st.markdown("#### Premium (>$30)")
+        
+        premium_games = df_price_quality[df_price_quality["Price"] > 30]
+        
+        if len(premium_games) > 0:
+            top_premium = premium_games.nlargest(5, "Metacritic score")[["Name", "Price", "Metacritic score"]]
+            top_premium.columns = ["Nom", "Prix ($)", "Metacritic"]
+            
+            st.dataframe(top_premium, hide_index=True, use_container_width=True)
 
-st.subheader("🎮 Jeux triés par score / sentiment")
+# ============================================================
+# TAB 4: EXCELLENCE PAR GENRE
+# ============================================================
+with tab4:
+    st.markdown("### 🏆 Excellence Critique par Genre")
+    
+    # Boxplot Metacritic par genre
+    df_boxplot_genre = df_meta.explode("Genres").dropna(subset=["Genres"])
+    top_genres_meta = df_boxplot_genre["Genres"].value_counts().head(15).index.tolist()
+    df_boxplot_genre = df_boxplot_genre[df_boxplot_genre["Genres"].isin(top_genres_meta)]
+    
+    fig_box_genre = px.box(
+        df_boxplot_genre,
+        x="Genres",
+        y="Metacritic score",
+        color="Genres",
+        color_discrete_sequence=COLORS['chart']
+    )
+    
+    fig_box_genre.update_layout(
+        **PLOTLY_LAYOUT,
+        xaxis_tickangle=-45,
+        showlegend=False,
+        height=450
+    )
+    
+    st.plotly_chart(fig_box_genre, use_container_width=True)
+    
+    st.divider()
+    
+    # Table statistiques par genre
+    st.markdown("### 📊 Statistiques par Genre (Top 10)")
+    
+    genre_stats = df_boxplot_genre.groupby("Genres")["Metacritic score"].agg([
+        ('Médiane', 'median'),
+        ('Moyenne', 'mean'),
+        ('Min', 'min'),
+        ('Max', 'max'),
+        ('Nb Jeux', 'count')
+    ]).reset_index()
+    
+    genre_stats = genre_stats.sort_values("Médiane", ascending=False).head(10)
+    
+    # Arrondir
+    for col in ['Médiane', 'Moyenne', 'Min', 'Max']:
+        genre_stats[col] = genre_stats[col].round(1)
+    
+    st.dataframe(genre_stats, hide_index=True, use_container_width=True)
 
-sort_option = st.selectbox(
-    "Trier par:",
-    [
-        "User Score (décroissant)",
-        "Metacritic Score (décroissant)",
-        "Ratio Positif (décroissant)",
-        "Total Reviews (décroissant)",
-        "Score Moyen (User + Metacritic)"
-    ]
+# ============================================================
+# FOOTER
+# ============================================================
+st.divider()
+st.caption(
+    "⭐ **GameData360 — Ratings & Sentiment Analysis** | "
+    f"Analyse Metacritic sur {len(df_meta):,} jeux notés | "
+    f"Sentiment Steam sur {len(df_reviews):,} jeux reviewés"
 )
-
-df_table = df_filtered.copy()
-df_table["Score Moyen"] = (
-    df_table["User score"].fillna(0) + df_table["Metacritic score"].fillna(0)
-) / 2
-
-if sort_option == "User Score (décroissant)":
-    df_table = df_table.sort_values("User score", ascending=False)
-elif sort_option == "Metacritic Score (décroissant)":
-    df_table = df_table.sort_values("Metacritic score", ascending=False)
-elif sort_option == "Ratio Positif (décroissant)":
-    df_table = df_table.sort_values("Positive Ratio", ascending=False)
-elif sort_option == "Total Reviews (décroissant)":
-    df_table = df_table.sort_values("Total Reviews", ascending=False)
-elif sort_option == "Score Moyen (User + Metacritic)":
-    df_table = df_table.sort_values("Score Moyen", ascending=False)
-
-display_cols = ["Name", "User score", "Metacritic score", "Positive", "Negative", 
-                "Positive Ratio", "Total Reviews"]
-
-df_display = df_table[display_cols].copy()
-df_display["Positive Ratio"] = (df_display["Positive Ratio"] * 100).round(2)
-df_display = df_display.rename(columns={
-    "Name": "Nom du Jeu",
-    "User score": "User Score",
-    "Metacritic score": "Metacritic Score",
-    "Positive": "Reviews Positives",
-    "Negative": "Reviews Négatives",
-    "Positive Ratio": "Ratio Positif (%)",
-    "Total Reviews": "Total Reviews"
-})
-
-st.dataframe(
-    df_display.head(100),
-    use_container_width=True,
-    height=400
-)
-
-st.caption(f"Affichage des 100 premiers jeux sur {len(df_table)} au total")
-
