@@ -15,7 +15,7 @@ from .config import (
     DTYPE_OPTIMIZATIONS,
     MULTI_KEYWORDS,
     SOLO_KEYWORDS
-)
+) # Import des parametres de configuration
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
@@ -74,19 +74,19 @@ def get_unique_values(df: pd.DataFrame, column: str) -> List[str]:
     lower_col = f"{column}_lower"
     if lower_col in df.columns:
         values = {
-            item 
-            for lst in df[lower_col] 
-            if isinstance(lst, list) 
-            for item in lst 
-            if item
+            item # extraction des items
+            for lst in df[lower_col] # extraction des listes
+            if isinstance(lst, list) # vérification que la colonne est une liste
+            for item in lst # extraction des items
+            if item # vérification que l'item est non vide
         }
     else:
         values = {
-            item.lower().strip() 
-            for lst in df[column] 
-            if isinstance(lst, list) 
-            for item in lst 
-            if item
+            item.lower().strip() # extraction des items
+            for lst in df[column] # extraction des listes
+            if isinstance(lst, list) # vérification que la colonne est une liste
+            for item in lst # extraction des items
+            if item # vérification que l'item est non vide
         }
     return sorted(values)
 
@@ -121,8 +121,8 @@ def apply_list_filter(
     else:
         mask = df[column].apply(
             lambda x: bool(
-                set(i.lower().strip() for i in x) & selected_set
-            ) if isinstance(x, list) else False
+                set(i.lower().strip() for i in x) & selected_set # vérification que la colonne est une liste
+            ) if isinstance(x, list) else False 
         )
     
     return df[mask].copy()
@@ -180,7 +180,7 @@ def categorize_game_mode(categories: list) -> str:
     
     cats_lower = {c.lower() for c in categories}
     
-    if cats_lower & MULTI_KEYWORDS:
+    if cats_lower & MULTI_KEYWORDS: 
         return "Multijoueur / Co-op"
     elif cats_lower & SOLO_KEYWORDS:
         return "Solo"
@@ -206,10 +206,10 @@ def calculate_genre_stats(
         DataFrame avec Genre et valeur agrégée
     """
     # Explosion si nécessaire
-    if df["Genres"].apply(lambda x: isinstance(x, list)).any():
+    if df["Genres"].apply(lambda x: isinstance(x, list)).any(): # Explosion si nécessaire
         df_exploded = explode_genres(df)
     else:
-        df_exploded = df
+        df_exploded = df # Si déjà explosé
     
     # Agrégation
     result = (

@@ -17,6 +17,7 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import sys
 from pathlib import Path
+from utils.data_helpers import explode_genres
 
 # Ajout du chemin utils au path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -77,7 +78,7 @@ st.markdown("""
 
 # Titre principal
 st.markdown("# 🌍 MARCHÉ GLOBAL")
-st.markdown("##### Vue d'ensemble du marché du jeu vidéo — Graphiques essentiels")
+st.markdown("##### Vue d'ensemble du marché du jeu vidéo : Graphiques essentiels")
 
 # ============================================================
 # 2. CHARGEMENT DES DONNÉES
@@ -115,63 +116,63 @@ except Exception as e:
 # 3. SIDEBAR - FILTRES ESSENTIELS
 # ============================================================
 st.sidebar.markdown("# 🎛️ Filtres Globaux")
-st.sidebar.markdown("Filtrez les données affichées dans tous les graphiques")
+st.sidebar.markdown("Filtrez les données affichées dans tous les graphiques !")
 
 # Filtre Genres
 st.sidebar.markdown("### 🎮 Genres")
-all_genres = sorted(set([g for genres in df_analyse["Genres"] if isinstance(genres, list) for g in genres]))
+all_genres = sorted(set([g for genres in df_analyse["Genres"] if isinstance(genres, list) for g in genres])) # extraction des genres
 selected_genres = st.sidebar.multiselect(
     "Sélectionner genres",
-    options=all_genres,
+    options=all_genres,# Injection des genres
     default=[],
     key="market_genres"
 )
 
 # Filtre Catégories
 st.sidebar.markdown("### 📂 Catégories")
-all_categories = sorted(set([c for cats in df_analyse["Categories"] if isinstance(cats, list) for c in cats]))
+all_categories = sorted(set([c for cats in df_analyse["Categories"] if isinstance(cats, list) for c in cats])) # extraction des catégories
 selected_categories = st.sidebar.multiselect(
     "Sélectionner catégories",
-    options=all_categories,
+    options=all_categories,# Injection des catégories
     default=[],
     key="market_categories"
 )
 
 # Filtre Tags
 st.sidebar.markdown("### 🏷️ Tags")
-all_tags = sorted(set([t for tags in df_analyse["Tags"] if isinstance(tags, list) for t in tags]))
+all_tags = sorted(set([t for tags in df_analyse["Tags"] if isinstance(tags, list) for t in tags])) # extraction des tags
 selected_tags = st.sidebar.multiselect(
     "Sélectionner tags",
-    options=all_tags,
+    options=all_tags,# Injection des tags
     default=[],
     key="market_tags"
 )
 
 # Filtre Prix
 st.sidebar.markdown("### 💰 Prix")
-price_min = float(df_analyse["Price"].min())
-price_max = float(df_analyse["Price"].max())
+price_min = float(df_analyse["Price"].min()) # extraction du prix minimum
+price_max = float(df_analyse["Price"].max()) # extraction du prix maximum
 
 price_range = st.sidebar.slider(
-    "Range de prix ($)",
-    min_value=price_min,
-    max_value=price_max,
-    value=(price_min, price_max),
-    step=1.0,
+    "Range de prix ($)", # Intitulé du slider
+    min_value=price_min, # Borne minimum
+    max_value=price_max, # Borne maximum
+    value=(price_min, price_max), # Plage par défaut
+    step=1.0, # Pas
     key="market_price"
 )
 
 # Filtre Année
 st.sidebar.markdown("### 📅 Année de Sortie")
-year_min = int(df_analyse["Release Year"].min())
-year_max = int(df_analyse["Release Year"].max())
+year_min = int(df_analyse["Release Year"].min()) # extraction de l'année minimum
+year_max = int(df_analyse["Release Year"].max()) # extraction de l'année maximum
 
 year_range = st.sidebar.slider(
-    "Période",
-    min_value=year_min,
-    max_value=year_max,
-    value=(year_min, year_max),
-    step=1,
+    "Période", # Intitulé du slider
+    min_value=year_min, # Borne minimum
+    max_value=year_max, # Borne maximum
+    value=(year_min, year_max), # Plage par défaut
+    step=1, # Pas
     key="market_year"
 )
 
@@ -310,7 +311,7 @@ st.markdown("### 📈 Évolution du Marché")
 col_evo1, col_evo2 = st.columns(2)
 
 with col_evo1:
-    st.markdown("#### Volume de Jeux par Année")
+    st.markdown("#### Volume de Jeux par Année à partir de l'an 2000")
     
     # Préparation données
     yearly_volume = df_filtered.groupby("Release Year").size().reset_index(name="Nombre de jeux")
@@ -332,7 +333,7 @@ with col_evo1:
     st.plotly_chart(fig_volume, use_container_width=True)
 
 with col_evo2:
-    st.markdown("#### Revenus Cumulés par Année")
+    st.markdown("#### Revenus Cumulés par Année à partir de l'an 2000")
     
     # Revenus par année
     yearly_revenue = df_filtered.groupby("Release Year")["Estimated revenue"].sum().reset_index()
@@ -451,7 +452,7 @@ with col_genre:
     st.markdown("#### Top 10 Genres")
     
     # Explosion genres
-    df_genres = df_filtered.explode("Genres").dropna(subset=["Genres"])
+    df_genres = explode_genres(df_filtered)
     genre_counts = df_genres["Genres"].value_counts().head(10).reset_index()
     genre_counts.columns = ["Genre", "Count"]
     
