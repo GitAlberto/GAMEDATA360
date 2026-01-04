@@ -45,9 +45,9 @@ COLORS = {
     "benchmark": "#ff3366",    # Rouge pour ligne de référence
     
     # Fond et grille
-    "background": "#0a0a0a",
-    "grid": "#1a1a1a",
-    "text": "#e5e5e5",
+    "background": "#0a0a0a", # Noir
+    "grid": "#1a1a1a", # Gris
+    "text": "#e5e5e5",  # Gris clair
 }
 
 # ============================================================
@@ -62,7 +62,7 @@ PLOTLY_LAYOUT = {
         "size": 12
     },
     "hoverlabel": {
-        "bgcolor": "#1a1a1a",
+        "bgcolor": "#1a1a1a", # Gris
         "font_size": 13,
         "font_family": "Rajdhani"
     },
