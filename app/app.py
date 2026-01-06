@@ -315,7 +315,7 @@ st.markdown("""
 **GameData360** — Dashboard d'Analyse Stratégique du Marché du Jeu Vidéo  
 Data source: Steam Platform | Analyse: 103,367 jeux
 
-Pour toute question ou suggestion d'amélioration, contactez l'équipe GameData360.
+Pour toute question ou suggestion d'amélioration, contactez l'équipe GameData360 | Katia BOUSSAD | Amine KONE | Ulrich ENELI ENELI | Alberto BONGUELE.
 
 ---
 

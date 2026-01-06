@@ -421,9 +421,10 @@ with col_dist3:
     st.markdown("#### F2P vs Payant")
     
     # Pie chart
+    paid_count = len(df_filtered) - f2p_count  # Correction: utiliser df_filtered
     f2p_data = pd.DataFrame({
         'Type': ['Free-to-Play', 'Payant'],
-        'Count': [f2p_count, len(df_analyse) - f2p_count]
+        'Count': [f2p_count, paid_count]
     })
     
     fig_f2p = px.pie(
@@ -513,7 +514,7 @@ with col_platform:
 st.divider()
 
 # ROW 4: Évolution F2P vs Payant
-st.markdown("### 🆓 Évolution Free-to-Play vs Payant")
+st.markdown("### 🆓 Évolution Free-to-Play vs Payant à partir de l'année 2000")
 
 # Évolution temporelle F2P
 df_filtered["Type"] = df_filtered["Price"].apply(lambda x: "Free-to-Play" if x == 0 else "Payant")
@@ -526,9 +527,10 @@ fig_f2p_evo = px.area(
     y="Count",
     color="Type",
     color_discrete_map={
-        "Free-to-Play": COLORS['primary'],
-        "Payant": COLORS['secondary']
-    }
+        "Free-to-Play": COLORS['primary'],      # Vert (en bas, petite aire)
+        "Payant": COLORS['secondary']            # Violet/Magenta (au-dessus, grande aire dominante)
+    },
+    category_orders={"Type": ["Free-to-Play", "Payant"]}  # F2P en 1er = bas, Payant en 2ème = dessus
 )
 
 fig_f2p_evo.update_layout(
