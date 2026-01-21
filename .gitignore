@@ -1,4 +1,4 @@
-# === ENVIRONNEMENTS PYTHON ===
+# Python
 .venv/
 env/
 venv/
@@ -7,56 +7,49 @@ __pycache__/
 *.pyo
 *.pyd
 
-# === JUPYTER NOTEBOOKS ===
+# Jupyter
 .ipynb_checkpoints/
-*.ipynb_checkpoints
 
-# === CONFIGURATION & VARIABLES SENSIBLES ===
+# Configuration
 .env
 config.yaml
-config.yaml.example
 
-# === DONNÉES ===
+# Données
 data/raw/
 data/tmp/
 *.csv
 *.xlsx
 *.json
+*.zip
 
-# === LOGS ===
+# Logs
 logs/
 *.log
 
-# === VISUALISATION ===
+# Visualisations
 *.png
 *.jpg
 *.jpeg
 *.svg
 *.pdf
 
-# === IDE / OS ===
+# IDE
 .DS_Store
 Thumbs.db
 .vscode/
 .idea/
 *.swp
 
-# === STREAMLIT CACHE ===
+# Streamlit
 .streamlit/
 .cache/
 
-# === BUILD / DIST ===
+# Build
 build/
 dist/
 *.egg-info/
 
-# === FICHIERS VOLUMINEUX (> 100 MB) ===
-# Fichiers ZIP de données
-*.zip
-data/raw.zip
-data/nettoyes.zip
-
-# Drivers et binaires
+# Drivers
 data/edgedriver_win32/
 *.exe
 
