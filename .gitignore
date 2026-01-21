@@ -60,8 +60,5 @@ data/nettoyes.zip
 data/edgedriver_win32/
 *.exe
 
-# Notebooks volumineux de scraping
-scripts/scrapping.ipynb
-
 # Exports
 exports/
