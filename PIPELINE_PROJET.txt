@@ -1,0 +1,868 @@
+================================================================================
+                  GAMEDATA360 - PIPELINE COMPLET DU PROJET
+================================================================================
+Projet      : GameData360 - Dashboard d'Analyse Stratégique
+Description : Pipeline de données du brut à l'insight
+Auteurs     : Katia BOUSSAD, Amine KONE, Ulrich ENELI ENELI, Alberto BONGUELE
+Version     : 3.0
+Date        : 2026-01-12
+================================================================================
+
+                            VUE D'ENSEMBLE DU PIPELINE
+
+    ┌─────────────┐      ┌─────────────┐      ┌─────────────┐      ┌─────────────┐
+    │             │      │             │      │             │      │             │
+    │  COLLECTE   │ ───▶ │  NETTOYAGE  │ ───▶ │ MODÉLISATION│ ───▶ │   ANALYSE   │
+    │             │      │             │      │             │      │             │
+    └─────────────┘      └─────────────┘      └─────────────┘      └─────────────┘
+        Steam API          Notebooks             PostgreSQL          Streamlit
+       SteamCharts         Python 3.8+          Star Schema           Plotly
+         103k jeux          Pandas               13 tables         11 pages analyse
+
+================================================================================
+TABLE DES MATIÈRES
+================================================================================
+1. PHASE 1 : COLLECTE DES DONNÉES (EXTRACTION)
+2. PHASE 2 : NETTOYAGE ET TRANSFORMATION (TRANSFORM)
+3. PHASE 3 : MODÉLISATION ET CHARGEMENT (LOAD)
+4. PHASE 4 : ANALYSE ET VISUALISATION
+5. FLUX DE DONNÉES DÉTAILLÉ
+6. OUTILS ET TECHNOLOGIES PAR PHASE
+7. CALENDRIER ET DURÉES
+8. MÉTRIQUES ET QUALITÉ
+
+================================================================================
+1. PHASE 1 : COLLECTE DES DONNÉES (EXTRACTION)
+================================================================================
+
+1.1 OBJECTIF
+------------
+Extraire les données brutes depuis Steam Platform et SteamCharts pour 
+constituer le dataset initial de 103,367 jeux vidéo.
+
+1.2 SOURCES DE DONNÉES
+----------------------
+
+Source 1 : Steam Platform API
+    • URL         : https://store.steampowered.com/api/
+    • Méthode     : GET appdetails
+    • Format      : JSON
+    • Fréquence   : Extraction unique (ou mensuelle pour MAJ)
+    • Volume      : ~103,367 jeux
+    
+    Données extraites :
+    ✓ AppID (identifiant unique)
+    ✓ Name (nom du jeu)
+    ✓ Release date (date de sortie)
+    ✓ Price (prix en USD)
+    ✓ Genres (liste)
+    ✓ Categories (liste)
+    ✓ Tags (liste)
+    ✓ Developers (liste)
+    ✓ Publishers (liste)
+    ✓ Platforms (Windows, Mac, Linux)
+    ✓ Metacritic score
+    ✓ User score
+    ✓ Positive/Negative reviews
+    ✓ Achievements
+    ✓ Recommendations
+    ✓ Average/Median playtime
+    ✓ Estimated owners
+    ✓ Estimated sales
+    ✓ Estimated revenue
+    ✓ Website
+
+Source 2 : SteamCharts (Web Scraping)
+    • URL         : https://steamcharts.com/
+    • Méthode     : Selenium (scraping dynamique)
+    • Format      : HTML → CSV
+    • But         : Enrichir avec Peak CCU (Concurrent Users)
+    
+    Données extraites :
+    ✓ Peak CCU (pic de joueurs simultanés)
+    ✓ Current players (optionnel)
+
+1.3 SCRIPTS D'EXTRACTION
+------------------------
+
+Fichier : scripts/ExtractionsAPI.ipynb
+    Type      : Jupyter Notebook
+    Langage   : Python 3.8+
+    Libraries : requests, pandas, json, time
+    
+    Processus :
+    1. Lire liste complète des AppIDs Steam
+    2. Pour chaque AppID :
+        a. Requête GET https://store.steampowered.com/api/appdetails?appids={appid}
+        b. Parser le JSON retourné
+        c. Extraire les champs pertinents
+        d. Pause (rate limiting) : 1 requête/seconde
+    3. Sauvegarder en CSV dans data/raw/
+
+Fichier : scripts/scrapping.ipynb
+    Type      : Jupyter Notebook
+    Langage   : Python 3.8+
+    Libraries : selenium, beautifulsoup4, pandas
+    
+    Processus :
+    1. Configurer Selenium WebDriver (Chrome/Edge)
+    2. Pour chaque AppID dans le dataset :
+        a. Naviguer vers https://steamcharts.com/app/{appid}
+        b. Extraire Peak CCU depuis la table HTML
+        c. Parser avec BeautifulSoup
+    3. Merger avec dataset principal sur AppID
+    4. Sauvegarder enrichi dans data/raw/
+
+1.4 RÉSULTAT PHASE 1
+--------------------
+Fichier de sortie : data/raw/steam_games_raw.csv
+Volume            : 103,367 lignes × ~45 colonnes
+Taille            : ~235 MB (compressé)
+Format            : CSV avec délimiteur virgule
+Encodage          : UTF-8
+
+================================================================================
+2. PHASE 2 : NETTOYAGE ET TRANSFORMATION (TRANSFORM)
+================================================================================
+
+2.1 OBJECTIF
+------------
+Nettoyer, valider et transformer les données brutes pour les rendre 
+exploitables dans la base de données et l'application d'analyse.
+
+2.2 OUTILS
+----------
+Type      : Jupyter Notebooks
+Langage   : Python 3.8+
+Libraries : pandas, numpy, ast, datetime
+
+2.3 SCRIPTS DE TRANSFORMATION
+-----------------------------
+
+Fichier : notebooks/EDA.ipynb
+    Tâches :
+    ✓ Exploration initiale du dataset
+    ✓ Statistiques descriptives
+    ✓ Identification valeurs manquantes
+    ✓ Détection outliers
+    ✓ Profiling des données
+
+Fichier : notebooks/EDA2.ipynb (principal)
+    Tâches détaillées :
+    
+    A. NETTOYAGE DE BASE
+    --------------------
+    1. Suppression des doublons
+        • Basé sur AppID (identifiant unique)
+        • Avant : 103,367 → Après : ~103,000
+    
+    2. Gestion des valeurs manquantes
+        • Price : 0 pour Free-to-Play
+        • Metacritic : NULL accepté (~70% manquants)
+        • Peak CCU : 0 si non disponible
+        • Genres, Tags, Categories : [] si vide
+    
+    3. Normalisation des formats
+        • Dates : conversion en datetime YYYY-MM-DD
+        • Prix : conversion en float (USD)
+        • Listes : conversion string → liste Python
+        • Booléens : True/False pour plateformes
+    
+    B. VALIDATION DES DONNÉES
+    --------------------------
+    4. Validation des types
+        • AppID : entier positif unique
+        • Price : numérique ≥ 0
+        • Scores : entre 0 et 100
+        • Dates : entre 1997 et 2024
+        • Avis : entiers positifs
+    
+    5. Détection des anomalies
+        • Prix aberrants (> $1000)
+        • Dates futures
+        • Nombres négatifs
+        • Caractères spéciaux non valides
+    
+    C. ENRICHISSEMENT
+    -----------------
+    6. Calcul de métriques dérivées
+        • Pourcentage avis positifs : Positive / (Positive + Negative)
+        • Année de sortie : extraction depuis Release date
+        • Trimestre de sortie
+        • Classification prix : Free / Budget / Standard / Premium / AAA
+    
+    7. Classification Solo/Multi
+        • Analyse de la colonne Categories
+        • Mots-clés : "single-player", "multi-player", "co-op", "mmo"
+        • Création colonne game_mode : Solo / Multi / Both / Unknown
+    
+    8. Segmentation par genre
+        • Explosion des listes de genres
+        • Identification genres principaux vs secondaires
+        • Comptage fréquences
+    
+    D. NETTOYAGE AVANCÉ
+    -------------------
+    9. Exclusion des non-jeux
+        • Genres exclus : "Utilities", "Design & Illustration", 
+          "Animation & Modeling", "Software Training"
+        • Réduit le dataset à ~98,000 véritables jeux
+    
+    10. Standardisation des noms
+        • Trim des espaces
+        • Conversion en title case
+        • Suppression caractères spéciaux
+        • Dédoublonnage développeurs/éditeurs
+
+Fichier : notebooks/EDA_jeux_beta.ipynb
+    Tâches :
+    ✓ Analyse spécifique des jeux en Early Access
+    ✓ Comparaison Published vs Beta
+    ✓ Identification patterns
+
+2.4 RÉSULTAT PHASE 2
+--------------------
+Fichier de sortie : data/nettoyes/jeux_analysis_final.csv
+Volume            : ~98,000 lignes × 45 colonnes (nettoyé)
+Taille            : ~36 MB
+Qualité           : 
+    • 0 doublon
+    • Valeurs manquantes documentées et gérées
+    • Types de données validés
+    • Anomalies corrigées
+    • Enrichi avec métriques calculées
+
+================================================================================
+3. PHASE 3 : MODÉLISATION ET CHARGEMENT (LOAD)
+================================================================================
+
+3.1 OBJECTIF
+------------
+Charger les données nettoyées dans une base de données PostgreSQL structurée 
+en Star Schema (modèle dimensionnel) pour optimiser les requêtes analytiques.
+
+3.2 ARCHITECTURE BASE DE DONNÉES
+---------------------------------
+Modèle   : Star Schema (Étoile)
+SGBD     : PostgreSQL 13+
+Base     : gamedata360
+Schémas  : public, staging, reporting
+Structure :
+    • 1 table de faits : fait_jeux
+    • 7 tables de dimensions : dim_temps, dim_genre, dim_tag, dim_categorie,
+                                dim_plateforme, dim_developpeur, dim_editeur
+    • 5 tables de liaison (N:N)
+    • 4 vues analytiques
+
+3.3 ÉTAPES DE CHARGEMENT
+-------------------------
+
+ÉTAPE 1 : Création du schéma
+    Fichier : sql/creation_tables.sql
+    Commande : psql -U postgres -f sql/creation_tables.sql
+    
+    Actions :
+    ✓ Créer la base de données gamedata360
+    ✓ Créer un utilisateur gamedata_user
+    ✓ Configurer les extensions (pgcrypto, uuid-ossp, pg_stat_statements)
+    ✓ Créer les schémas (public, staging, reporting)
+    ✓ Créer les 7 tables de dimensions
+    ✓ Créer la table de faits
+    ✓ Créer les 5 tables de liaison
+    ✓ Créer les index pour performance
+    ✓ Créer les 4 vues analytiques
+    ✓ Configurer les permissions
+
+ÉTAPE 2 : Import des données (Option A - Python)
+    Fichier : scripts/etl_complet_postgres.py
+    Commande : python scripts/etl_complet_postgres.py
+    
+    Processus :
+    1. Connexion PostgreSQL via SQLAlchemy
+        engine = create_engine("postgresql://user:pass@localhost:5432/gamedata360")
+    
+    2. Import CSV → staging_jeux (table temporaire)
+        df.to_sql('staging_jeux', engine, if_exists='replace')
+    
+    3. Population dim_plateforme
+        • Extraction combinaisons uniques (Windows, Mac, Linux)
+        • INSERT avec gestion des doublons : ON CONFLICT DO NOTHING
+    
+    4. Population dimensions Genres, Tags, Categories, Développeurs, Éditeurs
+        • Explosion des listes avec ast.literal_eval()
+        • Extraction valeurs uniques
+        • INSERT en bulk avec pandas.to_sql()
+    
+    5. Population fait_jeux
+        • Sélection colonnes métriques
+        • JOIN avec dim_plateforme pour récupérer id_plateforme
+        • INSERT avec mapping des clés étrangères
+    
+    6. Population tables de liaison (N:N)
+        Pour chaque relation (jeu_genre, jeu_tag, jeu_categorie, 
+                              jeu_developpeur, jeu_editeur) :
+            a. Lire les ID depuis fait_jeux et dimensions
+            b. Explosion des listes pour obtenir paires (id_fait, id_dim)
+            c. INSERT avec élimination doublons
+    
+    7. Vérification de l'intégrité
+        • Compter lignes dans chaque table
+        • Vérifier clés étrangères
+        • Valider contraintes
+
+ÉTAPE 2 : Import des données (Option B - SQL pur)
+    Fichier : sql/etl_import_csv.sql
+    Commande : psql -U gamedata_user -d gamedata360 -f sql/etl_import_csv.sql
+    
+    Avantages :
+    ✓ Plus rapide pour gros volumes
+    ✓ Moins de dépendances (pas Python)
+    
+    Inconvénients :
+    ✗ Manipulation strings plus complexe
+    ✗ Parsing listes nécessite fonctions PostgreSQL
+
+3.4 INDEX ET OPTIMISATIONS
+---------------------------
+Index créés automatiquement :
+    • Clés primaires (toutes les tables)
+    • Clés étrangères (tables de liaison)
+    • Colonnes fréquemment filtrées :
+        - fait_jeux.appid
+        - fait_jeux.date_sortie
+        - fait_jeux.prix
+        - fait_jeux.revenus_estimes
+        - fait_jeux.score_utilisateurs
+    • Colonnes de dimensions :
+        - dim_genre.nom_genre
+        - dim_tag.nom_tag
+        - dim_developpeur.nom_developpeur
+    
+Optimisations PostgreSQL :
+    • work_mem = 64MB (pour jointures)
+    • maintenance_work_mem = 256MB (pour index)
+    • effective_cache_size = 4GB
+    • random_page_cost = 1.1 (SSD)
+
+3.5 RÉSULTAT PHASE 3
+--------------------
+Base de données : gamedata360
+Tables remplies :
+    | Table                | Lignes      |
+    |----------------------|-------------|
+    | fait_jeux            | ~98,000     |
+    | dim_genre            | ~35         |
+    | dim_tag              | ~400        |
+    | dim_categorie        | ~30         |
+    | dim_plateforme       | ~8          |
+    | dim_developpeur      | ~25,000     |
+    | dim_editeur          | ~20,000     |
+    | jeu_genre            | ~150,000    |
+    | jeu_tag              | ~500,000    |
+    | jeu_categorie        | ~200,000    |
+    | jeu_developpeur      | ~115,000    |
+    | jeu_editeur          | ~110,000    |
+
+Taille totale : ~2 GB
+
+================================================================================
+4. PHASE 4 : ANALYSE ET VISUALISATION
+================================================================================
+
+4.1 OBJECTIF
+------------
+Fournir une interface web interactive pour explorer les données, générer des 
+insights et prendre des décisions stratégiques basées sur les analyses.
+
+4.2 ARCHITECTURE APPLICATION
+-----------------------------
+Framework : Streamlit 1.x
+Type      : Multi-page app
+Layout    : Wide (pleine largeur)
+Thème     : Gaming Néon Sombre (custom CSS)
+Graphiques : Plotly (interactifs)
+
+4.3 PAGES D'ANALYSE (11 pages)
+------------------------------
+
+Page 0 : app.py (Accueil)
+    Contenu :
+    • Présentation du projet
+    • Contexte et objectifs
+    • Pipeline de données (ce document)
+    • Architecture base de données
+    • Dictionnaire des données
+    • Guide de démarrage
+
+Page 1 : MARCHÉ GLOBAL
+    KPIs :
+    • Nombre total de jeux
+    • Revenus totaux estimés
+    • Prix moyen/médian
+    • Distribution par plateformes
+    
+    Graphiques :
+    • Top 10 genres par volume
+    • Répartition Free-to-Play vs Payant
+    • Distribution des prix (histogramme)
+    • Parts de marché par plateforme
+
+Page 2 : COMPORTEMENT JOUEURS
+    Analyses :
+    • Engagement (Peak CCU)
+    • Rétention (Median playtime)
+    • Recommandations top jeux
+    • Solo vs Multijoueur
+    
+    Graphiques :
+    • Top 20 jeux par Peak CCU
+    • Distribution playtime
+    • Recommandations par genre
+    • Ratio Solo/Multi par année
+
+Page 3 : RATINGS & SENTIMENT
+    Analyses :
+    • Qualité critique (Metacritic)
+    • Sentiment communauté (% positif)
+    • Polarisation des avis
+    • Corrélation qualité/prix
+    
+    Graphiques :
+    • Distribution Metacritic
+    • Scatter Prix vs Score
+    • Heatmap corrélations
+    • Jeux les plus polarisants
+
+Page 4 : GENRES & TAGS
+    Analyses :
+    • Combinaisons de genres gagnantes
+    • Co-occurrences de tags
+    • Tags émergents par année
+    • Mix genres/catégories
+    
+    Graphiques :
+    • Réseau de co-occurrences
+    • Heatmap genres×tags
+    • Timeline tags émergents
+    • Sankey diagram
+
+Page 5 : ÉCONOMIE
+    Analyses :
+    • Pareto 80/20 (revenus)
+    • Pricing power par genre
+    • Market share par développeur/éditeur
+    • Value for money
+    
+    Graphiques :
+    • Courbe de Lorenz
+    • Boxplot prix par genre
+    • Treemap revenus
+    • Scatter Qualité/Prix
+
+Page 6 : TENDANCES 15 ANS
+    Analyses :
+    • Évolution sorties de jeux par année
+    • Croissance Free-to-Play
+    • Prix moyen dans le temps
+    • Saturation du marché
+    
+    Graphiques :
+    • Timeline jeux sortis
+    • Stacked area F2P vs Payant
+    • Line chart prix moyen
+    • Heatmap volumes par trimestre
+
+Page 7 : SEGMENTATION JOUEURS
+    Segments :
+    • Casual (playtime < 5h)
+    • Hardcore (playtime > 50h)
+    • Budget (prix < $10)
+    • Premium (prix > $30)
+    • Social (Multi/Co-op)
+    • Solo Players
+    
+    Graphiques :
+    • Distribution par segment
+    • Profils types
+    • Préférences par segment
+
+Page 8 : PUBLISHED vs BETA
+    Comparaison :
+    • Jeux publiés vs Early Access
+    • Différences de prix
+    • Qualité (Metacritic)
+    • Engagement (Peak CCU)
+    
+    Graphiques :
+    • Violin plot prix
+    • Boxplot scores
+    • Barplot engagement
+
+Page 9 : EXPLORATION DE DONNÉES
+    Fonctionnalités :
+    • Recherche avancée
+    • Filtres multi-critères (Genres, Tags, Prix, Année, Score)
+    • Tri dynamique
+    • Export résultats CSV
+    • Comparateur de jeux
+    
+    Widgets :
+    • Multi-select
+    • Sliders
+    • Date pickers
+    • Dataframe interactif
+
+Page 10 : DEVELOPERS & PUBLISHERS
+    Analyses :
+    • Top développeurs par revenus
+    • Top éditeurs par volume
+    • Portfolio diversity
+    • Stratégies de pricing
+    
+    Graphiques :
+    • Barplot top 20 développeurs
+    • Treemap éditeurs
+    • Scatter Qualité/Volume
+
+Page 11 : ML CLUSTERING & RECOMMANDATIONS
+    Algorithmes :
+    • K-Means (clustering)
+    • DBSCAN (density-based)
+    • UMAP (réduction dimensionnelle 2D/3D)
+    • Cosine Similarity (recommandations)
+    
+    Features :
+    • Prix, Score, Playtime, Recommandations, Peak CCU
+    • Genres (one-hot encoding)
+    • Categories (one-hot encoding)
+    
+    Visualisations :
+    • Scatter 2D/3D (UMAP)
+    • Coloration par cluster
+    • Centroïdes
+    • Silhouette score
+    • Recommandations similaires (top 10)
+
+4.4 FILTRES GLOBAUX (SIDEBAR)
+-----------------------------
+Disponibles sur toutes les pages :
+    • Filtrage par Genres (multi-select)
+    • Filtrage par Categories (multi-select)
+    • Filtrage par Tags (multi-select)
+    • Slider Prix (min-max)
+    • Slider Année (1997-2024)
+    • Toggle F2P uniquement
+
+Comportement :
+    • Application immédiate
+    • Recalcul automatique des KPIs et graphiques
+    • Indicateur nombre de jeux filtrés
+    • Bouton Reset pour réinitialiser
+
+4.5 PERFORMANCE ET CACHE
+------------------------
+Optimisations :
+    • @st.cache_data(ttl=3600) sur chargement CSV
+    • Pré-calcul versions lowercase pour filtres
+    • Explosion de listes mise en cache
+    • Types optimisés (int32, float32, bool)
+    • Graphiques Plotly (rendus côté client)
+
+Temps de chargement :
+    • Initial : ~5-10 secondes (chargement CSV)
+    • Pages suivantes : instantané (cache)
+    • Filtrage : < 1 seconde (vectorisé)
+    • Graphiques : < 2 secondes (Plotly)
+
+4.6 RÉSULTAT PHASE 4
+--------------------
+Application : http://localhost:8501
+Pages       : 12 (accueil + 11 analyses)
+Graphiques  : ~60 visualisations interactives
+KPIs        : ~40 métriques clés
+Insights    : Automatiques sur chaque page
+
+================================================================================
+5. FLUX DE DONNÉES DÉTAILLÉ
+================================================================================
+
+5.1 DIAGRAMME FLUX COMPLET
+---------------------------
+
+START
+  │
+  ├─▶ [Steam API] ────┐
+  │                   │
+  └─▶ [SteamCharts] ──┤
+                      │
+                      ▼
+              [CSV Brut - 103k jeux]
+              (data/raw/steam_games_raw.csv)
+                      │
+                      ▼
+              [Notebooks Python]
+              (EDA.ipynb, EDA2.ipynb)
+                      │
+                      ├─▶ Suppression doublons
+                      ├─▶ Gestion valeurs manquantes
+                      ├─▶ Normalisation formats
+                      ├─▶ Validation types
+                      ├─▶ Calcul métriques dérivées
+                      ├─▶ Classification Solo/Multi
+                      └─▶ Exclusion non-jeux
+                      │
+                      ▼
+              [CSV Nettoyé - 98k jeux]
+              (data/nettoyes/jeux_analysis_final.csv)
+                      │
+                      ▼
+              [ETL PostgreSQL]
+              (etl_complet_postgres.py)
+                      │
+                      ├─▶ staging_jeux (table temporaire)
+                      │
+                      ├─▶ Dimensions
+                      │   ├─▶ dim_plateforme
+                      │   ├─▶ dim_genre
+                      │   ├─▶ dim_tag
+                      │   ├─▶ dim_categorie
+                      │   ├─▶ dim_developpeur
+                      │   └─▶ dim_editeur
+                      │
+                      ├─▶ Faits
+                      │   └─▶ fait_jeux
+                      │
+                      └─▶ Liaisons N:N
+                          ├─▶ jeu_genre
+                          ├─▶ jeu_tag
+                          ├─▶ jeu_categorie
+                          ├─▶ jeu_developpeur
+                          └─▶ jeu_editeur
+                      │
+                      ▼
+              [Base de Données PostgreSQL]
+              (gamedata360 - 13 tables)
+                      │
+                      │ (Option A: Requêtes SQL directes)
+                      │ (Option B: Chargement CSV pour Streamlit)
+                      │
+                      ▼
+              [Application Streamlit]
+              (app.py + 11 pages)
+                      │
+                      ├─▶ Chargement données (CSV ou BDD)
+                      ├─▶ Application filtres
+                      ├─▶ Calcul KPIs
+                      ├─▶ Génération graphiques Plotly
+                      ├─▶ Clustering ML (page 11)
+                      └─▶ Recommandations
+                      │
+                      ▼
+              [Dashboard Web Interactif]
+              (http://localhost:8501)
+                      │
+                      ▼
+                [UTILISATEUR]
+                (Analyse, Insights, Décisions)
+  │
+END
+
+5.2 FORMATS DE DONNÉES PAR ÉTAPE
+---------------------------------
+
+Étape 1 : Extraction API
+    Format  : JSON
+    Taille  : ~500 KB par requête
+    Volume  : 103k requêtes
+    Durée   : ~30 heures (rate limiting)
+
+Étape 2 : Stockage brut
+    Format  : CSV
+    Taille  : 235 MB (avant compression)
+    Colonnes : 45
+    Lignes  : 103,367
+
+Étape 3 : Nettoyage
+    Format  : CSV
+    Taille  : 36 MB
+    Colonnes : 45
+    Lignes  : ~98,000 (après exclusions)
+
+Étape 4 : Base de données
+    Format  : PostgreSQL
+    Taille  : 2 GB (avec index)
+    Tables  : 13
+    Lignes  : ~1.2M (toutes tables)
+
+Étape 5 : Application
+    Format  : Pandas DataFrame (mémoire)
+    Taille  : ~500 MB RAM
+    Graphiques : JSON (Plotly)
+
+================================================================================
+6. OUTILS ET TECHNOLOGIES PAR PHASE
+================================================================================
+
+6.1 PHASE 1 : COLLECTE
+----------------------
+| Outil          | Version | Usage                           |
+|----------------|---------|--------------------------------|
+| Python         | 3.8+    | Langage principal              |
+| Requests       | 2.x     | Requêtes HTTP API Steam        |
+| Selenium       | 4.x     | Web scraping SteamCharts       |
+| BeautifulSoup4 | 4.x     | Parsing HTML                   |
+| Pandas         | 1.x     | Manipulation données           |
+| ChromeDriver   | Latest  | Automation navigateur          |
+
+6.2 PHASE 2 : TRANSFORMATION
+----------------------------
+| Outil          | Version | Usage                           |
+|----------------|---------|--------------------------------|
+| Jupyter        | 7.x     | Notebooks interactifs          |
+| Pandas         | 1.x     | Data wrangling                 |
+| NumPy          | 1.x     | Calculs numériques             |
+| Matplotlib     | 3.x     | Visualisations exploration     |
+| Seaborn        | 0.11+   | Visualisations statistiques    |
+
+6.3 PHASE 3 : MODÉLISATION
+--------------------------
+| Outil          | Version | Usage                           |
+|----------------|---------|--------------------------------|
+| PostgreSQL     | 13+     | SGBD relationnel               |
+| SQLAlchemy     | 1.4+    | ORM et connexion Python        |
+| psycopg2       | 2.9+    | Driver PostgreSQL              |
+| pgAdmin        | 4.x     | Interface GUI PostgreSQL       |
+
+6.4 PHASE 4 : VISUALISATION
+---------------------------
+| Outil          | Version | Usage                           |
+|----------------|---------|--------------------------------|
+| Streamlit      | 1.x     | Framework web                  |
+| Plotly         | 5.x     | Graphiques interactifs         |
+| scikit-learn   | 1.x     | Machine Learning               |
+| UMAP           | 0.5+    | Réduction dimensionnelle       |
+| TextBlob       | 0.17+   | Analyse de sentiment           |
+| WordCloud      | 1.8+    | Nuages de mots                 |
+
+================================================================================
+7. CALENDRIER ET DURÉES
+================================================================================
+
+7.1 TEMPS D'EXÉCUTION PAR PHASE
+--------------------------------
+
+Phase 1 : Collecte
+    • Extraction API Steam      : ~30 heures (rate limiting 1 req/sec)
+    • Web scraping SteamCharts  : ~10 heures (100k jeux)
+    • Total                     : ~40 heures (automatisé)
+
+Phase 2 : Nettoyage
+    • EDA exploratoire          : ~4 heures (analyse manuelle)
+    • Nettoyage automatisé      : ~30 minutes (script)
+    • Validation qualité        : ~2 heures (vérifications)
+    • Total                     : ~6-7 heures
+
+Phase 3 : Chargement BDD
+    • Création schéma           : ~5 minutes
+    • ETL Python                : ~20 minutes (98k jeux)
+    • Création index            : ~10 minutes
+    • Vérifications             : ~5 minutes
+    • Total                     : ~40 minutes
+
+Phase 4 : Développement App
+    • Configuration Streamlit   : ~1 heure
+    • Page Accueil              : ~4 heures
+    • 11 pages d'analyse        : ~60 heures (5-6h par page)
+    • ML & Recommandations      : ~15 heures
+    • Tests et optimisations    : ~10 heures
+    • Total                     : ~90 heures
+
+TOTAL PROJET : ~137 heures (extraction incluse)
+
+7.2 CALENDRIER DE MISE À JOUR
+-----------------------------
+Recommandé : Mise à jour mensuelle
+
+Tâches mensuelles :
+    1. Réexécuter ExtractionsAPI.ipynb (nouvelles sorties)
+    2. Merge avec dataset existant
+    3. Réexécuter nettoyage
+    4. ETL incrémental (INSERT nouvelles données)
+    5. Vérification intégrité BDD
+    6. Redéploiement application
+
+Durée : ~5 heures/mois
+
+================================================================================
+8. MÉTRIQUES ET QUALITÉ
+================================================================================
+
+8.1 MÉTRIQUES DE QUALITÉ DES DONNÉES
+------------------------------------
+
+Complétude :
+    • AppID               : 100% (clé primaire)
+    • Name                : 100%
+    • Price               : 100% (0 = F2P)
+    • Release date        : 95%
+    • Genres              : 90%
+    • Metacritic score    : 30% (limitation source)
+    • Peak CCU            : 70%
+    • Playtime            : 60%
+
+Exactitude :
+    • Doublons            : 0%
+    • Valeurs aberrantes  : < 0.1% (filtrées)
+    • Formats invalides   : 0%
+    • Contraintes violées : 0%
+
+Fraîcheur :
+    • Dernière maj        : Variable (selon fréquence ETL)
+    • Âge médian données  : < 1 mois (si maj mensuelle)
+
+8.2 MÉTRIQUES DE PERFORMANCE
+----------------------------
+
+Application Streamlit :
+    • Temps chargement initial       : 5-10 secondes
+    • Temps changement de page       : < 1 seconde (cache)
+    • Temps application filtre       : < 1 seconde
+    • Temps rendu graphique          : 1-2 secondes
+    • Consommation mémoire           : ~500 MB
+    • Concurrent users supportés     : ~50 (dépend du serveur)
+
+Base de données :
+    • Taille totale                  : ~2 GB
+    • Temps requête simple           : < 50 ms
+    • Temps requête complexe (JOIN)  : < 500 ms
+    • Index coverage                 : 95%
+
+8.3 MÉTRIQUES MÉTIER
+--------------------
+
+Volume de données :
+    • Jeux analysés                  : 98,000
+    • Genres uniques                 : 35
+    • Tags uniques                   : 400
+    • Développeurs uniques           : 25,000
+    • Éditeurs uniques               : 20,000
+
+Analyses disponibles :
+    • KPIs                           : 40+
+    • Graphiques interactifs         : 60+
+    • Filtres                        : 6 types
+    • Pages d'analyse                : 11
+
+Machine Learning :
+    • Algorithmes implémentés        : 4 (K-Means, DBSCAN, UMAP, Cosine Sim)
+    • Features utilisées             : 15+
+    • Clusters identifiés            : 5-8 (selon config)
+    • Précision recommandations      : ~70-80% (similarité)
+
+================================================================================
+FIN DU PIPELINE COMPLET DU PROJET
+================================================================================
+Version : 3.0
+Date    : 2026-01-12
+Auteurs : Équipe GameData360
+================================================================================

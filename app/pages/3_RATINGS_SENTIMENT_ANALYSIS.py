@@ -242,31 +242,20 @@ with col_insight1:
                 f"on trouve d'excellents jeux à tous les prix !"
             )
     
-    # Insight 3: Best ROI par Tranche
-    if len(df_price_quality) > 0:
-        # Tranche <$10
-        budget = df_price_quality[df_price_quality["Price"] < 10]
-        
-        if len(budget) > 0:
-            best_budget = budget.nlargest(1, "Metacritic score").iloc[0]
-            
-            st.success(
-                f"💰 **Best Value <$10**: **{best_budget['Name']}** "
-                f"(Metacritic: {best_budget['Metacritic score']:.0f}, ${best_budget['Price']:.2f})"
+        # Insight 4: Sentiment vs Critique (alignement)
+        if len(df_corr) > 0 and correlation > 0.5:
+            st.info(
+                f"📊 **Alignement Communauté-Critique**: Corrélation **{correlation:.2f}** — "
+                f"la communauté Steam et les critiques sont généralement d'accord"
+            )
+        elif len(df_corr) > 0 and correlation < 0.3:
+            st.warning(
+                f"⚠️ **Divergence Communauté-Critique**: Corrélation **{correlation:.2f}** — "
+                f"la communauté et les critiques ont des opinions différentes"
             )
 
 with col_insight2:
-    # Insight 4: Sentiment vs Critique (alignement)
-    if len(df_corr) > 0 and correlation > 0.5:
-        st.info(
-            f"📊 **Alignement Communauté-Critique**: Corrélation **{correlation:.2f}** — "
-            f"la communauté Steam et les critiques sont généralement d'accord"
-        )
-    elif len(df_corr) > 0 and correlation < 0.3:
-        st.warning(
-            f"⚠️ **Divergence Communauté-Critique**: Corrélation **{correlation:.2f}** — "
-            f"la communauté et les critiques ont des opinions différentes"
-        )
+   
     
     # Insight 5: Jeux Polarisants (Reviews abondantes mais 50/50)
     polarizing = df_reviews[
@@ -325,7 +314,7 @@ with tab1:
         )
         
         # Lignes verticales pour les seuils
-        fig_hist_meta.add_vline(x=85, line_dash="dash", line_color=COLORS['primary'], 
+        fig_hist_meta.add_vline(x=85, line_dash="dash", line_color=COLORS['secondary'], 
                                 annotation_text="Exceptionnel (85)")
         fig_hist_meta.add_vline(x=70, line_dash="dash", line_color=COLORS['warning'], 
                                 annotation_text="Bon (70)")

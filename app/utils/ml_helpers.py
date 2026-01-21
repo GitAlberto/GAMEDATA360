@@ -29,7 +29,7 @@ def prepare_features_for_clustering(
     n_pca_components: int = 3
 ) -> Tuple[np.ndarray, pd.DataFrame, object]:
     """
-    Prépare la matrice de features pour le clustering (VERSION OPTIMISÉE).
+    Prépare la matrice de features pour le clustering.
     
     Améliorations:
     - Log-transform des features numériques pour réduire l'impact des outliers
@@ -101,7 +101,7 @@ def prepare_features_for_clustering(
                 lambda x: 1 if isinstance(x, list) and tag in x else 0
             )
     
-    # ---- NORMALISATION avec RobustScaler (résistant aux outliers) ----
+    # NORMALISATION avec RobustScaler (résistant aux outliers) ----
     scaler = RobustScaler()
     features_scaled = scaler.fit_transform(df_numeric)
     

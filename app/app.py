@@ -82,6 +82,7 @@ with col_obj1:
         <li>Identifier les segments porteurs</li>
         <li>Comprendre les comportements joueurs</li>
         <li>Évaluer la performance économique</li>
+        <li>Classifier et Recommander les jeux</li>
     </ul>
     </div>
     """, unsafe_allow_html=True)
@@ -115,7 +116,114 @@ with col_obj3:
 st.markdown("---")
 
 # ============================================================
-# 4. STRUCTURE DU DASHBOARD
+# 4. PIPELINE DE DONNÉES - PROCESSUS ETL
+# ============================================================
+st.markdown("## 🔄 Pipeline de Données : Du Brut à l'Insight")
+
+st.markdown("""
+Le projet **GameData360** suit un processus rigoureux de traitement des données pour garantir 
+des analyses fiables et performantes. Voici notre pipeline complet :
+""")
+
+# Diagramme du processus
+col_pipe1, col_pipe2, col_pipe3, col_pipe4 = st.columns(4)
+
+with col_pipe1:
+    st.markdown("""
+    <div class="info-box">
+    <h4>1️⃣ Collecte</h4>
+    <p><strong>Source:</strong> Steam Platform API</p>
+    <ul>
+        <li>103,367 jeux extraits</li>
+        <li>Scraping SteamCharts</li>
+        <li>Données brutes (CSV)</li>
+        <li>Mise à jour Peak CCU</li>
+    </ul>
+    </div>
+    """, unsafe_allow_html=True)
+
+with col_pipe2:
+    st.markdown("""
+    <div class="info-box">
+    <h4>2️⃣ Nettoyage</h4>
+    <p><strong>Traitement:</strong> Notebooks Python</p>
+    <ul>
+        <li>Suppression doublons</li>
+        <li>Gestion valeurs manquantes</li>
+        <li>Normalisation formats</li>
+        <li>Validation données</li>
+    </ul>
+    </div>
+    """, unsafe_allow_html=True)
+
+with col_pipe3:
+    st.markdown("""
+    <div class="info-box">
+    <h4>3️⃣ Modélisation</h4>
+    <p><strong>Base:</strong> PostgreSQL</p>
+    <ul>
+        <li>Star Schema (Étoile)</li>
+        <li>7 tables dimensions</li>
+        <li>1 table de faits</li>
+        <li>5 tables de liaison</li>
+    </ul>
+    </div>
+    """, unsafe_allow_html=True)
+
+with col_pipe4:
+    st.markdown("""
+    <div class="info-box">
+    <h4>4️⃣ Analyse</h4>
+    <p><strong>Dashboard:</strong> Streamlit + Plotly</p>
+    <ul>
+        <li>Visualisations interactives</li>
+        <li>KPIs temps réel</li>
+        <li>ML Clustering</li>
+        <li>Insights automatiques</li>
+    </ul>
+    </div>
+    """, unsafe_allow_html=True)
+
+st.markdown("---")
+
+# Détails du modèle de données
+st.markdown("### 🗄️ Architecture Base de Données (Star Schema)")
+
+db_col1, db_col2 = st.columns([1, 1])
+
+with db_col1:
+    st.markdown("""
+    **📊 Table de Faits : `fait_jeux`**
+    - Métriques centrales (prix, revenus, scores)
+    - +103k enregistrements
+    - Clés vers dimensions
+    - Métriques de performance indexées
+    
+    **🔗 Tables de Liaison N:N**
+    - `jeu_genre` : Jeux ↔ Genres
+    - `jeu_tag` : Jeux ↔ Tags
+    - `jeu_categorie` : Jeux ↔ Catégories
+    - `jeu_developpeur` : Jeux ↔ Développeurs
+    - `jeu_editeur` : Jeux ↔ Éditeurs
+    """)
+
+with db_col2:
+    st.markdown("""
+    **🏷️ Tables de Dimensions**
+    - `dim_temps` : Périodes temporelles
+    - `dim_genre` : Genres de jeux
+    - `dim_tag` : Tags communautaires
+    - `dim_categorie` : Catégories Steam
+    - `dim_plateforme` : Windows/Mac/Linux
+    - `dim_developpeur` : Studios de dev
+    - `dim_editeur` : Éditeurs
+    
+    """)
+
+st.markdown("---")
+
+# ============================================================
+# 5. STRUCTURE DU DASHBOARD
 # ============================================================
 st.markdown("## 🗺️ Navigation & Analyses Disponibles")
 
@@ -161,7 +269,7 @@ with nav_col2:
 st.markdown("---")
 
 # ============================================================
-# 5. DICTIONNAIRE DES DONNÉES
+# 6. DICTIONNAIRE DES DONNÉES
 # ============================================================
 st.markdown("## 📊 Dictionnaire des Données")
 st.markdown("Colonnes principales utilisées dans les analyses")
@@ -245,7 +353,7 @@ st.dataframe(
 st.markdown("---")
 
 # ============================================================
-# 6. INSIGHTS CLÉS & ENJEUX
+# 7. INSIGHTS CLÉS & ENJEUX
 # ============================================================
 st.markdown("## 💡 Insights Clés du Marché")
 
@@ -284,7 +392,7 @@ with insight_col3:
 st.markdown("---")
 
 # ============================================================
-# 7. GUIDE D'UTILISATION
+# 8. GUIDE D'UTILISATION
 # ============================================================
 st.markdown("## 🚀 Guide de Démarrage Rapide")
 
@@ -307,7 +415,7 @@ st.markdown("""
 st.markdown("---")
 
 # ============================================================
-# 8. FOOTER
+# 9. FOOTER
 # ============================================================
 st.markdown("## 📞 Contact & Support")
 

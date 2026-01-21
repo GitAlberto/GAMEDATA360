@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Configuration centralisée pour GameData360.
 Contient les constantes, palettes de couleurs et chemins.
@@ -69,7 +68,7 @@ PLOTLY_LAYOUT = {
     "margin": {"l": 40, "r": 40, "t": 50, "b": 40},
 }
 
-# Configuration des axes (à appliquer séparément pour éviter les conflits)
+# Configuration des axes 
 PLOTLY_AXIS = {
     "gridcolor": COLORS["grid"],
     "zerolinecolor": COLORS["grid"],

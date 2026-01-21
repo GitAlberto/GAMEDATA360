@@ -1,0 +1,678 @@
+================================================================================
+                    GAMEDATA360 - DOCUMENTATION TECHNIQUE
+================================================================================
+Projet      : GameData360 - Dashboard d'Analyse Stratégique du Marché du Jeu Vidéo
+Auteurs     : Katia BOUSSAD, Amine KONE, Ulrich ENELI ENELI, Alberto BONGUELE
+Version     : 1.0
+Date        : 2026-01-12
+================================================================================
+
+TABLE DES MATIÈRES
+================================================================================
+1. INTRODUCTION ET CONTEXTE
+2. ARCHITECTURE SYSTÈME
+3. BASE DE DONNÉES
+4. SCRIPTS ET ETL
+5. APPLICATION STREAMLIT
+6. DÉPENDANCES ET ENVIRONNEMENT
+7. CONFIGURATION ET DÉPLOIEMENT
+8. MAINTENANCE ET ÉVOLUTION
+
+================================================================================
+1. INTRODUCTION ET CONTEXTE
+================================================================================
+
+1.1 OBJECTIF DU PROJET
+----------------------
+GameData360 est un outil d'analyse stratégique basé sur les données de la 
+plateforme Steam, le plus grand distributeur de jeux vidéo PC avec plus de 
+103,000 jeux référencés.
+
+Mission : Transformer les données brutes en insights actionnables pour 
+comprendre les dynamiques du marché, identifier les opportunités, et guider 
+les décisions stratégiques.
+
+1.2 OBJECTIFS D'ANALYSE
+-----------------------
+• Analyser les tendances du marché du jeu vidéo
+• Identifier les segments porteurs
+• Comprendre les comportements des joueurs
+• Évaluer la performance économique
+• Classifier et recommander les jeux via Machine Learning
+
+1.3 PÉRIMÈTRE DES DONNÉES
+-------------------------
+Source      : Steam Platform API & SteamCharts
+Volume      : 103,367 jeux extraits
+Période     : 1997 - 2024
+Type        : Données PC exclusivement
+Limitations : 
+  - Données limitées à Steam (PC uniquement)
+  - Revenus estimés (non officiels)
+  - Metacritic incomplet (~30% des jeux)
+  - Biais vers jeux récents/populaires
+
+================================================================================
+2. ARCHITECTURE SYSTÈME
+================================================================================
+
+2.1 STRUCTURE DU PROJET
+-----------------------
+GAMEDATA360/
+│
+├── app/                          # Application Streamlit
+│   ├── app.py                    # Page d'accueil principale
+│   ├── pages/                    # Pages d'analyse (11 pages)
+│   │   ├── 1_MARCHÉ GLOBAL.py
+│   │   ├── 2_COMPORTEMENT JOUEURS.py
+│   │   ├── 3_RATINGS_SENTIMENT_ANALYSIS.py
+│   │   ├── 4_GENRES & TAGS INSIGHTS.py
+│   │   ├── 5_ÉCONOMIE.py
+│   │   ├── 6_TENDANCES SUR 15 ANS.py
+│   │   ├── 7_SEGMENTATION DES JOUEURS.py
+│   │   ├── 8_PUBLISHED vs BETA.py
+│   │   ├── 9_EXPLORATION DE DONNÉES.py
+│   │   ├── 10_DEVELOPERS & PUBLISHERS.py
+│   │   └── 11_ML CLUSTERING & RECOMMANDATIONS.py
+│   └── utils/                    # Modules utilitaires
+│       ├── __init__.py
+│       ├── config.py             # Configuration centralisée
+│       ├── data_helpers.py       # Chargement et filtrage des données
+│       └── ml_helpers.py         # Fonctions de Machine Learning
+│
+├── data/                         # Données brutes et nettoyées
+│   ├── raw/                      # Données brutes (CSV originaux)
+│   └── nettoyes/                 # Données nettoyées
+│       └── jeux_analysis_final.csv
+│
+├── notebooks/                    # Notebooks d'exploration
+│   ├── EDA.ipynb                 # Analyse exploratoire
+│   ├── EDA2.ipynb                # Analyse exploratoire avancée
+│   └── EDA_jeux_beta.ipynb       # Analyse spécifique jeux en beta
+│
+├── scripts/                      # Scripts ETL et processing
+│   ├── etl_complet_postgres.py   # ETL Python vers PostgreSQL
+│   ├── import_csv_postgres.py    # Import CSV vers PostgreSQL
+│   ├── ExtractionsAPI.ipynb      # Extraction via API Steam
+│   ├── scrapping.ipynb           # Web scraping SteamCharts
+│   ├── test_ml_clustering.py     # Tests clustering ML
+│   └── utils.py                  # Fonctions utilitaires
+│
+├── sql/                          # Scripts SQL
+│   ├── creation_tables.sql       # Création du schéma Star Schema
+│   ├── creation_tables_pgadmin.sql
+│   └── etl_import_csv.sql        # Import ETL SQL
+│
+├── requirements.txt              # Dépendances Python
+├── README.md                     # Documentation projet
+└── config.yaml.exemple           # Configuration exemple
+
+2.2 STACK TECHNOLOGIQUE
+-----------------------
+Langage       : Python 3.8+
+Frontend      : Streamlit 1.x
+Visualisation : Plotly, Matplotlib, Seaborn
+Base de données : PostgreSQL 13+
+ETL           : SQLAlchemy, Pandas
+Machine Learning : scikit-learn, UMAP
+Web Scraping  : Selenium, BeautifulSoup4
+NLP           : TextBlob, WordCloud
+
+================================================================================
+3. BASE DE DONNÉES
+================================================================================
+
+3.1 MODÈLE DE DONNÉES : STAR SCHEMA (ÉTOILE)
+--------------------------------------------
+Architecture dimensionnelle optimisée pour l'analyse OLAP (Online Analytical 
+Processing).
+
+Nom de la base : gamedata360
+Utilisateur    : gamedata_user
+Encodage       : UTF-8
+Locale         : French_France.1252
+
+3.2 TABLES DE DIMENSIONS (7 tables)
+-----------------------------------
+
+3.2.1 dim_temps
+    • id_temps (PK, SERIAL)
+    • date_complete (DATE, UNIQUE)
+    • annee (INTEGER)
+    • mois (INTEGER)
+    • trimestre (INTEGER)
+    • jour (INTEGER)
+    • jour_semaine (INTEGER)
+    • nom_mois (VARCHAR(20))
+    • nom_jour (VARCHAR(20))
+    
+    Index : idx_dim_temps_annee, idx_dim_temps_mois
+    Rôle  : Périodes temporelles pour analyse chronologique
+
+3.2.2 dim_developpeur
+    • id_developpeur (PK, SERIAL)
+    • nom_developpeur (VARCHAR(255), UNIQUE)
+    • date_creation (TIMESTAMP)
+    
+    Index : idx_dim_developpeur_nom
+    Rôle  : Catalogue des studios de développement
+
+3.2.3 dim_editeur
+    • id_editeur (PK, SERIAL)
+    • nom_editeur (VARCHAR(255), UNIQUE)
+    • date_creation (TIMESTAMP)
+    
+    Index : idx_dim_editeur_nom
+    Rôle  : Catalogue des éditeurs de jeux
+
+3.2.4 dim_genre
+    • id_genre (PK, SERIAL)
+    • nom_genre (VARCHAR(100), UNIQUE)
+    • description (TEXT)
+    
+    Index : idx_dim_genre_nom
+    Rôle  : Classification des genres (Action, RPG, Strategy...)
+
+3.2.5 dim_tag
+    • id_tag (PK, SERIAL)
+    • nom_tag (VARCHAR(100), UNIQUE)
+    • popularite (INTEGER)
+    
+    Index : idx_dim_tag_nom
+    Rôle  : Tags communautaires descriptifs
+
+3.2.6 dim_categorie
+    • id_categorie (PK, SERIAL)
+    • nom_categorie (VARCHAR(100), UNIQUE)
+    • description (TEXT)
+    
+    Index : idx_dim_categorie_nom
+    Rôle  : Catégories Steam (Single-player, Multi-player, Co-op...)
+
+3.2.7 dim_plateforme
+    • id_plateforme (PK, SERIAL)
+    • windows (BOOLEAN)
+    • mac (BOOLEAN)
+    • linux (BOOLEAN)
+    • description (VARCHAR(100))
+    
+    Index : idx_dim_plateforme_combinaison (windows, mac, linux)
+    Rôle  : Combinaisons de plateformes supportées
+
+3.3 TABLE DE FAITS (1 table)
+----------------------------
+
+3.3.1 fait_jeux
+    Clés étrangères :
+    • id_fait (PK, SERIAL)
+    • appid (INTEGER, UNIQUE) - Identifiant Steam
+    • id_temps (FK → dim_temps)
+    • id_plateforme (FK → dim_plateforme)
+    
+    Informations de base :
+    • nom_jeu (VARCHAR(500))
+    • date_sortie (DATE)
+    • site_web (VARCHAR(500))
+    • date_publication_steam (DATE)
+    
+    Métriques de prix et ventes :
+    • prix (NUMERIC(10,2))
+    • proprietaires_estimes (VARCHAR(50))
+    • ventes_estimees (NUMERIC(12,2))
+    • revenus_estimes (NUMERIC(15,2))
+    
+    Métriques de joueurs :
+    • pic_joueurs_simultanees (INTEGER)
+    • temps_jeu_moyen_total (INTEGER) -- en minutes
+    • temps_jeu_median_total (INTEGER) -- en minutes
+    
+    Métriques de satisfaction :
+    • score_utilisateurs (INTEGER, CHECK 0-100)
+    • avis_positifs (INTEGER)
+    • avis_negatifs (INTEGER)
+    • score_metacritic (INTEGER, CHECK 0-100)
+    • nombre_recommandations (INTEGER)
+    
+    Métriques de contenu :
+    • nombre_succes (INTEGER)
+    
+    Métadonnées :
+    • date_creation (TIMESTAMP)
+    • date_mise_a_jour (TIMESTAMP)
+    
+    Index : 
+    - idx_fait_jeux_appid
+    - idx_fait_jeux_date_sortie
+    - idx_fait_jeux_prix
+    - idx_fait_jeux_ventes
+    - idx_fait_jeux_revenus
+    - idx_fait_jeux_score
+
+3.4 TABLES DE LIAISON N:N (5 tables)
+------------------------------------
+Relations many-to-many entre jeux et dimensions :
+
+3.4.1 jeu_developpeur
+    • id_fait (FK → fait_jeux, ON DELETE CASCADE)
+    • id_developpeur (FK → dim_developpeur, ON DELETE CASCADE)
+    • PK(id_fait, id_developpeur)
+    Index : idx_jeu_developpeur_jeu, idx_jeu_developpeur_dev
+
+3.4.2 jeu_editeur
+    • id_fait (FK → fait_jeux)
+    • id_editeur (FK → dim_editeur)
+    • PK(id_fait, id_editeur)
+
+3.4.3 jeu_genre
+    • id_fait (FK → fait_jeux)
+    • id_genre (FK → dim_genre)
+    • PK(id_fait, id_genre)
+
+3.4.4 jeu_tag
+    • id_fait (FK → fait_jeux)
+    • id_tag (FK → dim_tag)
+    • ordre_pertinence (INTEGER) -- pour garder l'ordre des tags
+    • PK(id_fait, id_tag)
+
+3.4.5 jeu_categorie
+    • id_fait (FK → fait_jeux)
+    • id_categorie (FK → dim_categorie)
+    • PK(id_fait, id_categorie)
+
+3.5 VUES ANALYTIQUES (4 vues)
+-----------------------------
+
+3.5.1 v_jeux_complet
+    Vue complète des jeux avec toutes les dimensions jointes.
+    Colonnes : tous les champs de fait_jeux + dimensions dénormalisées
+
+3.5.2 v_stats_developpeur
+    Statistiques agrégées par développeur :
+    - nombre_jeux, score_moyen, ventes_totales, revenus_totaux, prix_moyen
+
+3.5.3 v_stats_genre
+    Statistiques agrégées par genre :
+    - nombre_jeux, score_moyen, ventes_totales, prix_moyen, total_avis
+
+3.5.4 v_evolution_ventes
+    Évolution temporelle :
+    - nombre_jeux_sortis, ventes_totales, revenus_totaux, prix_moyen, 
+      score_moyen (par année et mois)
+
+3.6 OPTIMISATIONS BASE DE DONNÉES
+---------------------------------
+work_mem                 : 64MB
+maintenance_work_mem     : 256MB
+random_page_cost         : 1.1 (optimisé pour SSD)
+effective_cache_size     : 4GB
+timezone                 : Europe/Paris
+client_encoding          : UTF8
+
+Extensions PostgreSQL :
+- pgcrypto              : Fonctions de hachage
+- uuid-ossp             : Génération UUID
+- pg_stat_statements    : Statistiques avancées
+- pg_trgm               : Full-Text Search
+
+================================================================================
+4. SCRIPTS ET ETL
+================================================================================
+
+4.1 PROCESSUS ETL (Extract, Transform, Load)
+--------------------------------------------
+
+4.1.1 Extraction (scripts/ExtractionsAPI.ipynb)
+    Source    : Steam Platform API
+    Volume    : 103,367 jeux
+    Format    : CSV brut
+    Champs    : AppID, Name, Price, Genres, Categories, Tags, etc.
+    
+    Enrichissement :
+    - Web scraping SteamCharts (scripts/scrapping.ipynb)
+    - Extraction Peak CCU (Concurrent Users)
+
+4.1.2 Transformation (notebooks/EDA*.ipynb)
+    Nettoyage :
+    • Suppression des doublons (basé sur AppID)
+    • Gestion des valeurs manquantes
+    • Normalisation des formats de date
+    • Validation des types de données
+    • Conversion des listes (Genres, Tags, Categories)
+    
+    Enrichissement :
+    • Calcul de métriques dérivées
+    • Classification Solo/Multi
+    • Segmentation prix/qualité
+    • Détection des anomalies
+
+4.1.3 Chargement (scripts/etl_complet_postgres.py)
+    Étapes :
+    1. Connexion PostgreSQL via SQLAlchemy
+    2. Import dans staging_jeux (table temporaire)
+    3. Population dim_plateforme (combinaisons uniques)
+    4. Population dimensions (Genres, Tags, Categories, Dev, Pub)
+    5. Population fait_jeux (table centrale)
+    6. Population tables de liaison (N:N)
+    7. Vérification de l'intégrité
+    
+    Gestion des conflits : ON CONFLICT DO NOTHING
+
+4.2 FICHIERS ETL
+----------------
+
+4.2.1 scripts/etl_complet_postgres.py
+    • ETL Python complet
+    • Utilise Pandas + SQLAlchemy
+    • Traite les listes Python avec ast.literal_eval
+    • Gère les relations N:N automatiquement
+
+4.2.2 sql/etl_import_csv.sql
+    • Alternative ETL pure SQL
+    • Plus rapide pour gros volumes
+    • Manipulation de strings pour parser les listes
+    • Utilise LATERAL JOIN pour explosion de listes
+
+4.2.3 scripts/import_csv_postgres.py
+    • Import simple CSV → PostgreSQL
+    • Pas de transformation complexe
+    • Pour tests et recharges rapides
+
+================================================================================
+5. APPLICATION STREAMLIT
+================================================================================
+
+5.1 ARCHITECTURE APPLICATION
+----------------------------
+Type        : Multi-page Streamlit App
+Framework   : Streamlit 1.x
+Layout      : Wide (pleine largeur)
+Thème       : Gaming Néon Sombre (custom CSS)
+Cache       : Optimisé avec @st.cache_data
+
+5.2 STRUCTURE DES PAGES
+-----------------------
+
+5.2.1 app.py (Page d'accueil)
+    • Présentation du contexte et objectifs
+    • Vue d'ensemble du pipeline de données
+    • Architecture de la base de données
+    • Navigation vers les analyses
+    • Dictionnaire des données
+    • Guide de démarrage rapide
+    
+    KPIs affichés : 103,367 jeux, période 1997-2024
+
+5.2.2 Pages d'analyse (11 pages)
+    
+    1_MARCHÉ GLOBAL.py
+        • Vue d'ensemble du marché
+        • Volumes, revenus, prix
+        • Distribution par plateformes
+        • Genres dominants
+    
+    2_COMPORTEMENT JOUEURS.py
+        • Engagement et rétention
+        • Playtime (moyen et médian)
+        • Popularité (Peak CCU)
+        • Recommandations
+        • Analyse Solo vs Multi
+    
+    3_RATINGS_SENTIMENT_ANALYSIS.py
+        • Qualité critique (Metacritic)
+        • Sentiment communauté
+        • Polarisation des avis
+        • Corrélations qualité/prix
+    
+    4_GENRES & TAGS INSIGHTS.py
+        • Combinaisons de genres gagnantes
+        • Co-occurrences de tags
+        • Tags émergents
+        • Mix genres/catégories
+    
+    5_ÉCONOMIE.py
+        • Analyse économique Pareto
+        • Pricing power
+        • Market share
+        • Value for money
+        • Segments de prix
+    
+    6_TENDANCES SUR 15 ANS.py
+        • Évolution temporelle du marché
+        • Croissance par année
+        • Boom du Free-to-Play
+        • Saturation post-2020
+        • Impact COVID
+    
+    7_SEGMENTATION DES JOUEURS.py
+        • Segments comportementaux :
+          - Casual / Hardcore
+          - Budget / Premium
+          - Social / Solo
+          - Quality Seekers
+    
+    8_PUBLISHED vs BETA.py
+        • Comparaison jeux publiés vs Early Access
+        • Différences de pricing
+        • Qualité et engagement
+    
+    9_EXPLORATION DE DONNÉES.py
+        • Outil de recherche avancée
+        • Filtrage granulaire multi-critères
+        • Comparateur de jeux
+        • Data browser interactif
+    
+    10_DEVELOPERS & PUBLISHERS.py
+        • Analyse par studio/éditeur
+        • Portfolio et performance
+        • Parts de marché
+        • Stratégies de pricing
+    
+    11_ML CLUSTERING & RECOMMANDATIONS.py
+        • Clustering K-Means / DBSCAN
+        • Réduction dimensionnelle (UMAP)
+        • Système de recommandation
+        • Visualisations 2D/3D
+        • Segmentation automatique
+
+5.3 MODULES UTILITAIRES
+-----------------------
+
+5.3.1 app/utils/config.py
+    Contenu :
+    • Chemins des fichiers (BASE_DIR, DATA_DIR, FILE_PATH)
+    • Palette de couleurs gaming (COLORS)
+    • Configuration Plotly (PLOTLY_LAYOUT, PLOTLY_AXIS)
+    • Liste des colonnes (LIST_COLUMNS)
+    • Optimisations de types (DTYPE_OPTIMIZATIONS)
+    • Mots-clés Solo/Multi (MULTI_KEYWORDS, SOLO_KEYWORDS)
+    • Genres à exclure (NON_GAME_GENRES)
+    • Configuration onglets (TAB_CONFIG)
+
+5.3.2 app/utils/data_helpers.py
+    Fonctions :
+    • load_game_data() : Chargement optimisé avec cache
+    • get_unique_values() : Extraction valeurs uniques
+    • apply_list_filter() : Filtrage vectorisé
+    • apply_all_filters() : Application filtres combinés
+    • explode_genres() : Explosion des genres avec cache
+    • categorize_game_mode() : Classification Solo/Multi
+    • calculate_genre_stats() : Statistiques par genre
+    • format_number() : Formatage K/M/B
+
+5.3.3 app/utils/ml_helpers.py
+    Fonctions :
+    • Préprocessing des données pour ML
+    • Clustering (K-Means, DBSCAN)
+    • Réduction dimensionnelle (UMAP, PCA)
+    • Système de recommandation
+    • Évaluation des modèles
+
+5.4 OPTIMISATIONS PERFORMANCE
+-----------------------------
+• Cache Streamlit (@st.cache_data) avec TTL 3600s
+• Chargement lazy des données
+• Filtrage vectorisé (Pandas set operations)
+• Types de données optimisés (int32, float32, bool)
+• Pré-calcul des versions lowercase pour filtres
+• Explosion de listes mise en cache
+• Graphiques Plotly (plus rapides que Matplotlib)
+
+5.5 DESIGN ET UX
+----------------
+Thème : Gaming Néon Sombre
+Police : Rajdhani (Google Fonts)
+Couleurs principales :
+    • Vert néon (#00ff88) : Succès, positif
+    • Magenta (#ff00ff) : Accent
+    • Cyan (#00ffff) : Info
+    • Orange (#ffaa00) : Warning
+    • Rouge rosé (#ff3366) : Danger
+
+Composants :
+    • Metrics avec dégradés
+    • Info boxes avec bordures néon
+    • Graphiques interactifs (survol, zoom, clic)
+    • Tabs stylisés
+    • Dataframes avec bordures
+
+================================================================================
+6. DÉPENDANCES ET ENVIRONNEMENT
+================================================================================
+
+6.1 FICHIER requirements.txt
+----------------------------
+pandas              # Manipulation de données
+numpy               # Calculs numériques
+requests            # Requêtes HTTP
+beautifulsoup4      # Parsing HTML
+selenium            # Web scraping dynamique
+sqlalchemy          # ORM et connexion BDD
+psycopg2-binary     # Driver PostgreSQL
+streamlit           # Framework web
+scikit-learn        # Machine Learning
+umap-learn          # Réduction dimensionnelle
+plotly              # Visualisations interactives
+matplotlib          # Visualisations statiques
+seaborn             # Visualisations statistiques
+textblob            # NLP et analyse de sentiment
+wordcloud           # Nuages de mots
+
+6.2 INSTALLATION
+----------------
+Commandes :
+    python -m venv .venv
+    .venv\Scripts\activate    (Windows)
+    pip install -r requirements.txt
+
+6.3 CONFIGURATION
+----------------
+Fichier : config.yaml (à créer depuis config.yaml.exemple)
+Contenu :
+    database:
+      host: localhost
+      port: 5432
+      database: gamedata360
+      user: gamedata_user
+      password: GameData@2026#Secure
+
+================================================================================
+7. CONFIGURATION ET DÉPLOIEMENT
+================================================================================
+
+7.1 PRÉREQUIS SYSTÈME
+---------------------
+• Python 3.8 ou supérieur
+• PostgreSQL 13 ou supérieur
+• Minimum 8 GB RAM (16 GB recommandé)
+• SSD pour meilleures performances
+• Connexion Internet (pour extraction API)
+
+7.2 INSTALLATION BASE DE DONNÉES
+---------------------------------
+Étapes :
+1. Installer PostgreSQL
+2. Se connecter en tant que postgres
+3. Exécuter sql/creation_tables.sql
+4. Charger les données avec scripts/etl_complet_postgres.py
+
+Commandes PostgreSQL :
+    psql -U postgres
+    \i sql/creation_tables.sql
+    \q
+
+7.3 LANCEMENT APPLICATION
+-------------------------
+Commandes :
+    cd GAMEDATA360
+    .venv\Scripts\activate
+    streamlit run app/app.py
+
+Accès : http://localhost:8501
+
+7.4 DÉPLOIEMENT PRODUCTION
+--------------------------
+Options :
+• Streamlit Cloud (gratuit, limité)
+• Heroku + PostgreSQL addon
+• AWS EC2 + RDS
+• Docker + Kubernetes
+• Azure App Service
+
+Recommandations :
+• Utiliser gunicorn pour production
+• Configurer HTTPS
+• Limiter accès à la BDD
+• Mettre en place monitoring (Sentry, New Relic)
+• Backups automatiques PostgreSQL
+
+================================================================================
+8. MAINTENANCE ET ÉVOLUTION
+================================================================================
+
+8.1 MAINTENANCE RÉGULIÈRE
+-------------------------
+• Mise à jour mensuelle des données Steam
+• Vacuum PostgreSQL pour optimiser l'espace
+• Vérification des index
+• Nettoyage des caches Streamlit
+• Monitoring des performances
+• Revue des logs d'erreurs
+
+8.2 ÉVOLUTIONS POSSIBLES
+------------------------
+• Intégration API temps réel Steam
+• Ajout d'autres plateformes (Epic, GOG)
+• Prédictions ML (prix, succès)
+• Analyse de sentiment avancée (reviews textuelles)
+• Export des rapports (PDF, Excel)
+• Dashboard admin pour gestion des données
+• API REST pour accès externe
+• Système de notifications
+• Analyse comparative entre plateformes
+• Prévisions de tendances (séries temporelles)
+
+8.3 BUGS CONNUS ET LIMITATIONS
+------------------------------
+• Metacritic disponible pour ~30% des jeux uniquement
+• Revenus estimés (non officiels)
+• Pas de données consoles (PlayStation, Xbox, Nintendo)
+• Peak CCU manquant pour certains jeux
+• Temps de chargement initial (gros dataset)
+• Clustering sensible aux outliers
+
+8.4 SUPPORT ET CONTACT
+----------------------
+Équipe GameData360 :
+    • Katia BOUSSAD
+    • Amine KONE
+    • Ulrich ENELI ENELI
+    • Alberto BONGUELE
+
+Pour questions techniques : contacter l'équipe projet
+
+================================================================================
+FIN DE LA DOCUMENTATION TECHNIQUE
+================================================================================
+Version : 3.0
+Date de dernière mise à jour : 2026-01-12
+================================================================================
