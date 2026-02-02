@@ -564,17 +564,6 @@ Commandes :
     .venv\Scripts\activate    (Windows)
     pip install -r requirements.txt
 
-6.3 CONFIGURATION
-----------------
-Fichier : config.yaml (à créer depuis config.yaml.exemple)
-Contenu :
-    database:
-      host: localhost
-      port: 5432
-      database: gamedata360
-      user: gamedata_user
-      password: GameData@2026#Secure
-
 ================================================================================
 7. CONFIGURATION ET DÉPLOIEMENT
 ================================================================================
@@ -587,19 +576,6 @@ Contenu :
 • SSD pour meilleures performances
 • Connexion Internet (pour extraction API)
 
-7.2 INSTALLATION BASE DE DONNÉES
----------------------------------
-Étapes :
-1. Installer PostgreSQL
-2. Se connecter en tant que postgres
-3. Exécuter sql/creation_tables.sql
-4. Charger les données avec scripts/etl_complet_postgres.py
-
-Commandes PostgreSQL :
-    psql -U postgres
-    \i sql/creation_tables.sql
-    \q
-
 7.3 LANCEMENT APPLICATION
 -------------------------
 Commandes :
@@ -609,36 +585,11 @@ Commandes :
 
 Accès : http://localhost:8501
 
-7.4 DÉPLOIEMENT PRODUCTION
---------------------------
-Options :
-• Streamlit Cloud (gratuit, limité)
-• Heroku + PostgreSQL addon
-• AWS EC2 + RDS
-• Docker + Kubernetes
-• Azure App Service
-
-Recommandations :
-• Utiliser gunicorn pour production
-• Configurer HTTPS
-• Limiter accès à la BDD
-• Mettre en place monitoring (Sentry, New Relic)
-• Backups automatiques PostgreSQL
-
 ================================================================================
 8. MAINTENANCE ET ÉVOLUTION
 ================================================================================
 
-8.1 MAINTENANCE RÉGULIÈRE
--------------------------
-• Mise à jour mensuelle des données Steam
-• Vacuum PostgreSQL pour optimiser l'espace
-• Vérification des index
-• Nettoyage des caches Streamlit
-• Monitoring des performances
-• Revue des logs d'erreurs
-
-8.2 ÉVOLUTIONS POSSIBLES
+8.1 ÉVOLUTIONS POSSIBLES
 ------------------------
 • Intégration API temps réel Steam
 • Ajout d'autres plateformes (Epic, GOG)
@@ -651,13 +602,13 @@ Recommandations :
 • Analyse comparative entre plateformes
 • Prévisions de tendances (séries temporelles)
 
-8.3 BUGS CONNUS ET LIMITATIONS
+8.2 BUGS CONNUS ET LIMITATIONS
 ------------------------------
 • Metacritic disponible pour ~30% des jeux uniquement
 • Revenus estimés (non officiels)
 • Pas de données consoles (PlayStation, Xbox, Nintendo)
 • Peak CCU manquant pour certains jeux
-• Temps de chargement initial (gros dataset)
+• Temps de chargement initial ( notre dataset est gros )
 • Clustering sensible aux outliers
 
 8.4 SUPPORT ET CONTACT
@@ -666,13 +617,6 @@ Recommandations :
     • Katia BOUSSAD
     • Amine KONE
     • Ulrich ENELI ENELI
-    • Alberto BONGUELE
+    • Alberto BONGUELE (En priorité)
 
 Pour questions techniques : contacter l'équipe projet
-
-================================================================================
-FIN DE LA DOCUMENTATION TECHNIQUE
-================================================================================
-Version : 1.0
-Date de dernière mise à jour : 2026-01-12
-================================================================================
