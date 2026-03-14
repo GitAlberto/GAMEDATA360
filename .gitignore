@@ -23,8 +23,6 @@ data/tmp/
 *.xlsx
 *.json
 
-# ⚠️ Tu peux versionner les fichiers "processed" si utiles :
-# data/processed/  ← tu peux commenter cette ligne si tu veux suivre les data nettoyées
 
 # === LOGS ===
 logs/
