@@ -13,10 +13,10 @@ print(f"✓ Python executable: {sys.executable}")
 print("\n--- Test import Streamlit ---")
 try:
     import streamlit as st
-    print(f"✅ Streamlit installé: version {st.__version__}")
+    print(f"Streamlit installé: version {st.__version__}")
     print(f"   Emplacement: {st.__file__}")
 except ImportError as e:
-    print(f"❌ Streamlit NON installé!")
+    print(f"Streamlit NON installé!")
     print(f"   Erreur: {e}")
     print("\n🔧 SOLUTION: Installez streamlit avec:")
     print("   python -m pip install streamlit")
@@ -29,7 +29,7 @@ for pkg in packages:
     try:
         mod = __import__(pkg.replace('-', '_'))
         version = getattr(mod, '__version__', 'N/A')
-        print(f"✅ {pkg}: {version}")
+        print(f"{pkg}: {version}")
     except ImportError:
         print(f"❌ {pkg}: NON INSTALLÉ")
 
@@ -38,10 +38,10 @@ print("\n--- Test modules projet ---")
 try:
     sys.path.insert(0, 'app')
     from utils.config import FILE_PATH, COLORS
-    print(f"✅ utils.config importé")
+    print(f"utils.config importé")
     print(f"   FILE_PATH: {FILE_PATH}")
 except Exception as e:
-    print(f"❌ Erreur import config: {e}")
+    print(f"Erreur import config: {e}")
 
 print("\n" + "=" * 60)
 print("DIAGNOSTIC TERMINÉ")
